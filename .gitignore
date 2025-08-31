@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+*.env
+
+# PyCharm / JetBrains IDE
+.idea/
+*.iml
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+*.out
+*.err
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Docker
+*.pid
+*.tar
+*.bak
+*.old
+
+# Ignore local config/secrets
+secrets.yaml
+*.secret
+*.key
+*.crt
+*.pem
+
+# Ignore local dev only files
+.env.local
+.envrc
