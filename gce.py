@@ -27,8 +27,7 @@ def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
 
     # Inject startup script (replace placeholder with auth key)
     if startup_script_template:
-        startup_script = startup_script_template.replace("__TS_AUTHKEY__", auth_key)
-        startup_script = startup_script_template.replace("__K3S_KEY__", k3s_key)
+        startup_script = startup_script_template.replace("__TS_AUTHKEY__", auth_key).replace("__K3S_KEY__", k3s_key)
         metadata = compute_v1.Metadata()
         metadata.items = [compute_v1.Items(key="startup-script", value=startup_script)]
         instance_resource.metadata = metadata
