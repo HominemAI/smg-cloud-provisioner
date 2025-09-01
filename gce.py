@@ -2,12 +2,12 @@ import os
 import uuid
 from google.cloud import compute_v1
 
-def create_instance_from_template():
+def create_instance_from_template(auth_key: str):
     project_id = os.getenv("GCP_PROJECT")
     zone = os.getenv("GCP_ZONE", "us-central1-a")
     name_prefix = os.getenv("INSTANCE_NAME", "ts-node")
     template_name = os.getenv("INSTANCE_TEMPLATE")
-    startup_script = os.getenv("STARTUP_SCRIPT")
+    startup_script_template = os.getenv("STARTUP_SCRIPT")
 
     if not project_id or not template_name:
         raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
@@ -20,16 +20,20 @@ def create_instance_from_template():
     # Create the InstancesClient
     instances_client = compute_v1.InstancesClient()
 
-    # Construct template reference (assuming global template)
+    # Construct the template reference
     template_url = f"global/instanceTemplates/{template_name}"
 
-    # Base instance resource
+    # Inject the auth key into the startup script (placeholder replacement)
+    startup_script = None
+    if startup_script_template:
+        startup_script = startup_script_template.replace("__TS_AUTHKEY__", auth_key)
+
+    # Build instance resource
     instance_resource = compute_v1.Instance(
         name=instance_name,
         source_instance_template=template_url,
     )
 
-    # Add startup script if provided
     if startup_script:
         metadata = compute_v1.Metadata()
         metadata.items = [
@@ -45,6 +49,6 @@ def create_instance_from_template():
     )
 
     print(f"Creating instance {instance_name}, operation: {operation.name}")
-    operation.result()  # Wait for the op to complete
+    operation.result()  # Wait for completion
     print(f"Instance {instance_name} created successfully!")
     return instance_name
