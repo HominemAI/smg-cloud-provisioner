@@ -11,6 +11,7 @@ app = FastAPI()
 TAILNET = os.getenv("TAILNET")
 OAUTH_ID = os.getenv("TS_OAUTH_ID")
 OAUTH_SECRET = os.getenv("TS_OAUTH_SECRET")
+K3S_KEY = os.getenv("K3S_KEY")
 PORT = int(os.getenv("PORT", "80"))
 
 missing = []
@@ -20,6 +21,8 @@ if not OAUTH_ID:
     missing.append("TS_OAUTH_ID")
 if not OAUTH_SECRET:
     missing.append("TS_OAUTH_SECRET")
+if not OAUTH_SECRET:
+    missing.append("K3S_KEY")
 
 if missing:
     sys.stderr.write(f"Missing required environment variables: {', '.join(missing)}\n")
@@ -99,7 +102,7 @@ def new_instance():
         return {"error": "No key in response", "response": key_response}
 
     try:
-        instance_name = gce.create_instance_from_template(auth_key)
+        instance_name = gce.create_instance_from_template(auth_key, K3S_KEY)
         return {"instance": instance_name}
     except Exception as e:
         return {"error": str(e)}

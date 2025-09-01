@@ -2,7 +2,7 @@ import os
 import uuid
 from google.cloud import compute_v1
 
-def create_instance_from_template(auth_key: str):
+def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
     project_id = os.getenv("GCP_PROJECT")
     zone = os.getenv("GCP_ZONE", "us-west1-a")  # must match the region of your template
     name_prefix = os.getenv("INSTANCE_NAME", "ts-node")
@@ -28,6 +28,7 @@ def create_instance_from_template(auth_key: str):
     # Inject startup script (replace placeholder with auth key)
     if startup_script_template:
         startup_script = startup_script_template.replace("__TS_AUTHKEY__", auth_key)
+        startup_script = startup_script_template.replace("__K3S_KEY__", k3s_key)
         metadata = compute_v1.Metadata()
         metadata.items = [compute_v1.Items(key="startup-script", value=startup_script)]
         instance_resource.metadata = metadata
