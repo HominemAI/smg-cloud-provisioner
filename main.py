@@ -4,6 +4,7 @@ import os
 import base64
 import sys
 import time
+import gce
 
 app = FastAPI()
 
@@ -86,3 +87,19 @@ def new_key():
         return {"error": r.status_code, "response": r.text}
 
     return r.json()
+
+@app.get("/newinstance")
+def new_key():
+    key_response = new_key()
+    if "error" in key_response:
+        return key_response
+
+    auth_key = key_response.get("key")
+    if not auth_key:
+        return {"error": "No key in response", "response": key_response}
+
+    try:
+        instance_name = gce.create_instance_from_template(auth_key)
+        return {"instance": instance_name}
+    except Exception as e:
+        return {"error": str(e)}
