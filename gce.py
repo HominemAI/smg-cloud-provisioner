@@ -17,38 +17,36 @@ def create_instance_from_template(auth_key: str):
     instance_name = f"{name_prefix}-{unique_suffix}"
     print(f"Using instance name: {instance_name}")
 
-    # Create the InstancesClient
-    instances_client = compute_v1.InstancesClient()
-
-    # Construct the template reference
-    template_url = f"global/instanceTemplates/{template_name}"
-
-    # Inject the auth key into the startup script (placeholder replacement)
-    startup_script = None
-    if startup_script_template:
-        startup_script = startup_script_template.replace("__TS_AUTHKEY__", auth_key)
-
-    # Build instance resource
-    instance_resource = compute_v1.Instance(
-        name=instance_name,
-        source_instance_template=template_url,
+    # Build the full template URL
+    source_instance_template_url = (
+        f"projects/{project_id}/global/instanceTemplates/{template_name}"
     )
 
-    if startup_script:
+    # Prepare request body with just the name
+    instance_resource = compute_v1.Instance(name=instance_name)
+
+    # Inject startup script if provided (replace __TS_AUTHKEY__)
+    if startup_script_template:
+        startup_script = startup_script_template.replace("__TS_AUTHKEY__", auth_key)
         metadata = compute_v1.Metadata()
         metadata.items = [
             compute_v1.Items(key="startup-script", value=startup_script)
         ]
         instance_resource.metadata = metadata
 
-    # Call the API
-    operation = instances_client.insert(
+    # Create client
+    client = compute_v1.InstancesClient()
+
+    # Correct API call — pass source_instance_template at the top level
+    operation = client.insert(
         project=project_id,
         zone=zone,
         instance_resource=instance_resource,
+        source_instance_template=source_instance_template_url,
     )
 
     print(f"Creating instance {instance_name}, operation: {operation.name}")
-    operation.result()  # Wait for completion
+    operation.result()  # wait for completion
     print(f"Instance {instance_name} created successfully!")
+
     return instance_name
