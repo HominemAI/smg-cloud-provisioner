@@ -3,6 +3,7 @@ import requests
 import os
 import base64
 import sys
+import time
 
 app = FastAPI()
 
@@ -23,18 +24,50 @@ if missing:
     sys.stderr.write(f"Missing required environment variables: {', '.join(missing)}\n")
     sys.exit(1)
 
+# cache for the OAuth token
+token_cache = {
+    "access_token": None,
+    "expires_at": 0
+}
+
+
+def get_access_token():
+    """Fetch and cache a bearer token from Tailscale OAuth"""
+    now = int(time.time())
+    # refresh 30s before actual expiry
+    if token_cache["access_token"] and token_cache["expires_at"] > now + 30:
+        return token_cache["access_token"]
+
+    token_url = "https://api.tailscale.com/api/v2/oauth/token"
+    r = requests.post(token_url, data={
+        "client_id": OAUTH_ID,
+        "client_secret": OAUTH_SECRET
+    })
+
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError:
+        raise RuntimeError(f"Failed to fetch token: {r.status_code} {r.text}")
+
+    data = r.json()
+    token_cache["access_token"] = data["access_token"]
+    token_cache["expires_at"] = now + int(data.get("expires_in", 3600))
+
+    return token_cache["access_token"]
+
 
 @app.get("/newkey")
 def new_key():
-    url = f"https://api.tailscale.com/api/v2/tailnet/{TAILNET}/keys"
-    auth = base64.b64encode(f"{OAUTH_ID}:{OAUTH_SECRET}".encode()).decode()
+    access_token = get_access_token()
 
+    url = f"https://api.tailscale.com/api/v2/tailnet/{TAILNET}/keys"
     payload = {
         "capabilities": {
             "devices": {
                 "create": {
                     "ephemeral": True,
                     "reusable": False,
+                    # both tags required by your tailnet policy
                     "tags": ["tag:temp-instance", "tag:prod"]
                 }
             }
@@ -43,14 +76,13 @@ def new_key():
     }
 
     r = requests.post(url, headers={
-        "Authorization": f"Basic {auth}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
     }, json=payload)
 
     try:
         r.raise_for_status()
     except requests.exceptions.HTTPError:
-        # return full error message from Tailscale
         return {"error": r.status_code, "response": r.text}
 
     return r.json()
