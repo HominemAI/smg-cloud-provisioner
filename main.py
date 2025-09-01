@@ -89,7 +89,7 @@ def new_key():
     return r.json()
 
 @app.get("/newinstance")
-def new_key():
+def new_instance():
     key_response = new_key()
     if "error" in key_response:
         return key_response
