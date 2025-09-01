@@ -9,7 +9,7 @@ app = FastAPI()
 TAILNET = os.getenv("TAILNET")
 OAUTH_ID = os.getenv("TS_OAUTH_ID")
 OAUTH_SECRET = os.getenv("TS_OAUTH_SECRET")
-PORT = int(os.getenv("PORT", "80"))  # default to 80 if not set
+PORT = int(os.getenv("PORT", "80"))
 
 missing = []
 if not TAILNET:
@@ -33,15 +33,24 @@ def new_key():
         "capabilities": {
             "devices": {
                 "create": {
-                    "reusable": False,
                     "ephemeral": True,
-                    "tags": ["tag:gce"]
+                    "reusable": False,
+                    "tags": ["tag:temp-instance", "tag:prod"]
                 }
             }
         },
         "expirySeconds": 3600
     }
 
-    r = requests.post(url, headers={"Authorization": f"Basic {auth}"}, json=payload)
-    r.raise_for_status()
+    r = requests.post(url, headers={
+        "Authorization": f"Basic {auth}",
+        "Content-Type": "application/json"
+    }, json=payload)
+
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError:
+        # return full error message from Tailscale
+        return {"error": r.status_code, "response": r.text}
+
     return r.json()
