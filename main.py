@@ -91,7 +91,7 @@ def new_key():
 
     return r.json()
 
-@app.get("/newinstance")
+@app.get("/instance/new")
 def new_instance():
     key_response = new_key()
     if "error" in key_response:
@@ -107,7 +107,7 @@ def new_instance():
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/instance/{instance_name}")
+@app.get("/instance/delete/{instance_name}")
 def delete_instance(instance_name: str):
     try:
         gce.shutdown_instance(instance_name)
