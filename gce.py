@@ -10,8 +10,8 @@ startup_script_template = os.getenv("STARTUP_SCRIPT")
 if not project_id or not template_name:
     raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
 
-def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
 
+def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
     # Unique instance name
     unique_suffix = str(uuid.uuid4())[:8]
     instance_name = f"{name_prefix}-{unique_suffix}"
@@ -27,7 +27,9 @@ def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
 
     # Inject startup script (replace placeholder with auth key)
     if startup_script_template:
-        startup_script = startup_script_template.replace("__TS_AUTHKEY__", auth_key).replace("__K3S_KEY__", k3s_key)
+        startup_script = (startup_script_template.replace("__TS_AUTHKEY__", auth_key)
+                          .replace("__K3S_KEY__", k3s_key)
+                          .replace("__INSTANCE_NAME__", instance_name))
         metadata = compute_v1.Metadata()
         metadata.items = [compute_v1.Items(key="startup-script", value=startup_script)]
         instance_resource.metadata = metadata
