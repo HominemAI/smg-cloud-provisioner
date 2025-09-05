@@ -5,6 +5,7 @@ import base64
 import sys
 import time
 import gce
+import k8s
 
 app = FastAPI()
 
@@ -111,6 +112,7 @@ def new_instance():
 def delete_instance(instance_name: str):
     try:
         gce.shutdown_instance(instance_name)
+        k8s.deregister_k8s_node(instance_name)
         return {"instance": instance_name, "status": "deleted"}
     except Exception as e:
         return {"error": str(e)}
