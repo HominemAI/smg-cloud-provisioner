@@ -106,3 +106,12 @@ def new_instance():
         return {"instance": instance_name}
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/instance/{instance_name}")
+def delete_instance(instance_name: str):
+    try:
+        gce.shutdown_instance(instance_name)
+        return {"instance": instance_name, "status": "deleted"}
+    except Exception as e:
+        return {"error": str(e)}
+

@@ -2,15 +2,15 @@ import os
 import uuid
 from google.cloud import compute_v1
 
-def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
-    project_id = os.getenv("GCP_PROJECT")
-    zone = os.getenv("GCP_ZONE", "us-west1-a")  # must match the region of your template
-    name_prefix = os.getenv("INSTANCE_NAME", "ts-node")
-    template_name = os.getenv("INSTANCE_TEMPLATE")
-    startup_script_template = os.getenv("STARTUP_SCRIPT")
+project_id = os.getenv("GCP_PROJECT")
+zone = os.getenv("GCP_ZONE", "us-west1-a")  # must match the region of your template
+name_prefix = os.getenv("INSTANCE_NAME", "ts-node")
+template_name = os.getenv("INSTANCE_TEMPLATE")
+startup_script_template = os.getenv("STARTUP_SCRIPT")
+if not project_id or not template_name:
+    raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
 
-    if not project_id or not template_name:
-        raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
+def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
 
     # Unique instance name
     unique_suffix = str(uuid.uuid4())[:8]
@@ -48,3 +48,16 @@ def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
     print(f"Instance {instance_name} created successfully!")
 
     return instance_name
+
+
+def shutdown_instance(instance_name: str):
+    client = compute_v1.InstancesClient()
+    request = compute_v1.DeleteInstanceRequest(
+        project=project_id,
+        zone=zone,
+        instance=instance_name,
+    )
+    operation = client.delete(request=request)
+    print(f"Deleting instance {instance_name}, operation: {operation.name}")
+    operation.result()  # wait until done
+    print(f"Instance {instance_name} deleted successfully!")
