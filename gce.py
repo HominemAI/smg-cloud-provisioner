@@ -3,7 +3,7 @@ import uuid
 from google.cloud import compute_v1
 
 project_id = os.getenv("GCP_PROJECT")
-zone = os.getenv("GCP_ZONE", "us-west1-a")  # must match the region of your template
+zone = os.getenv("GCP_ZONE", "us-west1-a")
 name_prefix = os.getenv("INSTANCE_NAME", "ts-node")
 template_name = os.getenv("INSTANCE_TEMPLATE")
 startup_script_template = os.getenv("STARTUP_SCRIPT")
@@ -36,7 +36,6 @@ def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
 
     client = compute_v1.InstancesClient()
 
-    # Request object with regional template
     request = compute_v1.InsertInstanceRequest(
         project=project_id,
         zone=zone,
@@ -61,5 +60,5 @@ def shutdown_instance(instance_name: str):
     )
     operation = client.delete(request=request)
     print(f"Deleting instance {instance_name}, operation: {operation.name}")
-    operation.result()  # wait until done
+    operation.result()
     print(f"Instance {instance_name} deleted successfully!")
