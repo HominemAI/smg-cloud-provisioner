@@ -20,6 +20,9 @@ IS_DEPROVISIONING = False
 
 PROVISIONING_TIME = time.time()
 
+def notify_creation_callback(instance_name: str):
+    print("Notifying creation callback")
+
 
 def auto_scale():
     global IS_PROVISIONING, IS_DEPROVISIONING, PROVISIONING_TIME, SCALER_PROVISIONING_TIMEOUT
@@ -34,8 +37,8 @@ def auto_scale():
             if not auth_key:
                 IS_PROVISIONING = False
                 raise RuntimeError(f"Could not generate Tailscale key: {key_response}")
-            instance_name = gce.create_instance_from_template(auth_key, os.getenv("K3S_KEY", ""))
-            print(f"Instance name created: {instance_name} startup and registration in progress...")
+            instance_name = gce.create_instance_from_template(auth_key, os.getenv("K3S_KEY", ""), callback=notify_creation_callback)
+            print(f"Instance creation triggered: {instance_name} startup and registration in progress...")
         else:
             if k8s.get_latest_node_time() > PROVISIONING_TIME:
                 IS_PROVISIONING = False

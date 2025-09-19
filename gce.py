@@ -1,4 +1,5 @@
 import os
+import threading
 import uuid
 from google.cloud import compute_v1
 
@@ -11,7 +12,18 @@ if not project_id or not template_name:
     raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
 
 
-def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
+def operation_create_instance_submission(client, request, callback):
+    operation = client.insert(request=request)
+    operation.result()
+    if callback:
+        callback(request.instance_resource.name)
+def operation_delete_instance_submission(client, request, callback):
+    operation = client.delete(request=request)
+    operation.result()
+    if callback:
+        callback(request.instance)
+
+def create_instance_from_template(auth_key: str, k3s_key: str, callback=None) -> str:
     # Unique instance name
     unique_suffix = str(uuid.uuid4())[:8]
     instance_name = f"{name_prefix}-{unique_suffix}"
@@ -33,7 +45,6 @@ def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
         metadata = compute_v1.Metadata()
         metadata.items = [compute_v1.Items(key="startup-script", value=startup_script)]
         instance_resource.metadata = metadata
-
     client = compute_v1.InstancesClient()
 
     request = compute_v1.InsertInstanceRequest(
@@ -43,22 +54,16 @@ def create_instance_from_template(auth_key: str, k3s_key: str) -> str:
         source_instance_template=source_instance_template_url,
     )
 
-    operation = client.insert(request=request)
-    print(f"Creating instance {instance_name}, operation: {operation.name}")
-    operation.result()  # wait until done
-    print(f"Instance {instance_name} created successfully!")
-
-    return instance_name
+    creation_thread = threading.Thread(target=operation_create_instance_submission, args=(client, request, callback))
+    creation_thread.start()
 
 
-def shutdown_instance(instance_name: str):
+def shutdown_instance(instance_name: str, callback=None):
     client = compute_v1.InstancesClient()
     request = compute_v1.DeleteInstanceRequest(
         project=project_id,
         zone=zone,
         instance=instance_name,
     )
-    operation = client.delete(request=request)
-    print(f"Deleting instance {instance_name}, operation: {operation.name}")
-    operation.result()
-    print(f"Instance {instance_name} deleted successfully!")
+    deletion_thread = threading.Thread(target=operation_delete_instance_submission, args=(client, request, callback))
+    deletion_thread.start()
