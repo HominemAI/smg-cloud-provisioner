@@ -1,4 +1,5 @@
 import os
+import time
 from typing import List
 from kubernetes import client, config, watch
 import asyncio
@@ -13,12 +14,22 @@ v1 = client.CoreV1Api()
 
 NODE_POOL = AsyncSet()
 GPU_PODS = AsyncSet()
-UNSCHEDULED_GPU_PODS = set()
+UNSCHEDULED_GPU_PODS = AsyncSet()
 
 NODE_ROLE_LABEL = os.getenv('NODE_OWNER_LABEL', "smgp-role")
 NODE_ROLE_LABEL_VALUE = os.getenv('NODE_ROLE_LABEL_VALUE', "gpu")
 INSTANCE_PROVIDER_LABEL = os.getenv('INSTANCE_PROVIDER_LABEL', "smgp-instance-provider")
 INSTANCE_IDENTIFIER_LABEL = os.getenv('INSTANCE_IDENTIFIER_LABEL', "smgp-instance-identifier")
+
+LATEST_NODE_TIME = time.time()
+
+
+def get_current_node_count() -> int:
+    return NODE_POOL.size()
+
+
+def get_current_gpu_pod_count() -> int:
+    return GPU_PODS.size()
 
 
 def get_all_active_pods() -> List:
@@ -86,9 +97,12 @@ def update_pods_lists():
     UNSCHEDULED_GPU_PODS = UNSCHEDULED_GPU_PODS - set(pods)
 
 
-def add_node_to_pool(node: object) -> None:
-    global NODE_POOL
-    NODE_POOL.add(node)
+def add_node_to_pool(node: object, source="watch") -> None:
+    global NODE_POOL, LATEST_NODE_TIME
+    if node not in NODE_POOL:  # Only if truly new
+        NODE_POOL.add(node)
+        LATEST_NODE_TIME = time.time()  # New node detected
+        print(f"New node added from {source}: {node.metadata.name}")
 
 
 def remove_node_from_pool(node: object) -> None:
@@ -96,6 +110,21 @@ def remove_node_from_pool(node: object) -> None:
     if node in NODE_POOL:
         NODE_POOL.remove(node)
         print(f"Node removed: {node.metadata.name}")
+
+
+def get_latest_node_time() -> float:
+    global LATEST_NODE_TIME
+    return LATEST_NODE_TIME
+
+
+def update_nodes_list():
+    global LATEST_NODE_TIME, NODE_POOL
+    nodes = v1.list_node(label_selector=f"{NODE_ROLE_LABEL}={NODE_ROLE_LABEL_VALUE}", _request_timeout=60).items
+    for node in nodes:
+        if len(nodes) > NODE_POOL.size():
+            LATEST_NODE_TIME = time.time()
+        NODE_POOL.add(node)
+        print(f"Node added: {node.metadata.name}")
 
 
 def request_node_removal(qty: int = 1) -> dict | bool:

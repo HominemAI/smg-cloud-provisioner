@@ -1,0 +1,82 @@
+import os
+import sys
+import time
+
+import requests
+
+TAILNET = os.getenv("TAILNET")
+OAUTH_ID = os.getenv("TS_OAUTH_ID")
+OAUTH_SECRET = os.getenv("TS_OAUTH_SECRET")
+missing = []
+
+if not TAILNET:
+    missing.append("TAILNET")
+if not OAUTH_ID:
+    missing.append("TS_OAUTH_ID")
+if not OAUTH_SECRET:
+    missing.append("TS_OAUTH_SECRET")
+
+if missing:
+    sys.stderr.write(f"Missing required environment variables: {', '.join(missing)}\n")
+    sys.exit(1)
+
+token_cache = {
+    "access_token": None,
+    "expires_at": 0
+}
+
+
+def get_access_token():
+    global token_cache
+    """Fetch and cache a bearer token from Tailscale OAuth"""
+    now = int(time.time())
+    # refresh 30s before actual expiry
+    if token_cache["access_token"] and token_cache["expires_at"] > now + 30:
+        return token_cache["access_token"]
+
+    token_url = "https://api.tailscale.com/api/v2/oauth/token"
+    r = requests.post(token_url, data={
+        "client_id": OAUTH_ID,
+        "client_secret": OAUTH_SECRET
+    })
+
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError:
+        raise RuntimeError(f"Failed to fetch token: {r.status_code} {r.text}")
+
+    data = r.json()
+    token_cache["access_token"] = data["access_token"]
+    token_cache["expires_at"] = now + int(data.get("expires_in", 3600))
+
+    return token_cache["access_token"]
+
+
+def request_key():
+    access_token = get_access_token()
+
+    url = f"https://api.tailscale.com/api/v2/tailnet/{TAILNET}/keys"
+    payload = {
+        "capabilities": {
+            "devices": {
+                "create": {
+                    "ephemeral": True,
+                    "reusable": False,
+                    "tags": ["tag:temp-instance", "tag:prod"]
+                }
+            }
+        },
+        "expirySeconds": 3600
+    }
+
+    r = requests.post(url, headers={
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }, json=payload)
+
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError:
+        return {"error": r.status_code, "response": r.text}
+
+    return r.json()
