@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import time
 
 import requests
@@ -7,6 +8,9 @@ import requests
 TAILNET = os.getenv("TAILNET")
 OAUTH_ID = os.getenv("TS_OAUTH_ID")
 OAUTH_SECRET = os.getenv("TS_OAUTH_SECRET")
+
+TS_KEY_EXPIRY = 3600  # seconds
+
 missing = []
 
 if not TAILNET:
@@ -20,19 +24,18 @@ if missing:
     sys.stderr.write(f"Missing required environment variables: {', '.join(missing)}\n")
     sys.exit(1)
 
-token_cache = {
+TOKEN_CACHE = {
     "access_token": None,
     "expires_at": 0
 }
 
 
 def get_access_token():
-    global token_cache
-    """Fetch and cache a bearer token from Tailscale OAuth"""
+    global TOKEN_CACHE, TS_KEY_EXPIRY
     now = int(time.time())
     # refresh 30s before actual expiry
-    if token_cache["access_token"] and token_cache["expires_at"] > now + 30:
-        return token_cache["access_token"]
+    if TOKEN_CACHE["access_token"] and TOKEN_CACHE["expires_at"] > now + 30:
+        return TOKEN_CACHE["access_token"]
 
     token_url = "https://api.tailscale.com/api/v2/oauth/token"
     r = requests.post(token_url, data={
@@ -46,13 +49,18 @@ def get_access_token():
         raise RuntimeError(f"Failed to fetch token: {r.status_code} {r.text}")
 
     data = r.json()
-    token_cache["access_token"] = data["access_token"]
-    token_cache["expires_at"] = now + int(data.get("expires_in", 3600))
+    TOKEN_CACHE["access_token"] = data["access_token"]
+    TOKEN_CACHE["expires_at"] = now + int(data.get("expires_in", TS_KEY_EXPIRY))
 
-    return token_cache["access_token"]
+    # Sets the env var for use by startup script parsing
+    os.environ["TS_AUTHKEY"] = data["access_token"]
+
+    print("Fetched new access token, expires at " + time.ctime(TOKEN_CACHE["expires_at"]))
+    return TOKEN_CACHE["access_token"]
 
 
 def request_key():
+    global TOKEN_CACHE
     access_token = get_access_token()
 
     url = f"https://api.tailscale.com/api/v2/tailnet/{TAILNET}/keys"
@@ -66,7 +74,7 @@ def request_key():
                 }
             }
         },
-        "expirySeconds": 3600
+        "expirySeconds": TS_KEY_EXPIRY
     }
 
     r = requests.post(url, headers={
@@ -78,5 +86,16 @@ def request_key():
         r.raise_for_status()
     except requests.exceptions.HTTPError:
         return {"error": r.status_code, "response": r.text}
-
+    print("Requested new Tailscale Auth Key")
     return r.json()
+
+
+def token_refresh():
+    while True:
+        get_access_token()
+        time.sleep(TS_KEY_EXPIRY)
+
+
+def start():
+    thread = threading.Thread(target=token_refresh)
+    thread.start()

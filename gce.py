@@ -1,55 +1,75 @@
 import os
+import re
 import threading
 import uuid
 from google.cloud import compute_v1
 
-project_id = os.getenv("GCP_PROJECT")
-zone = os.getenv("GCP_ZONE", "us-west1-a")
-name_prefix = os.getenv("INSTANCE_NAME", "ts-node")
-template_name = os.getenv("INSTANCE_TEMPLATE")
-startup_script_template = os.getenv("STARTUP_SCRIPT")
-if not project_id or not template_name:
+PROJECT_ID = os.getenv("GCP_PROJECT")
+ZONE = os.getenv("GCP_ZONE", "us-west1-a")
+NAME_PREFIX = os.getenv("INSTANCE_NAME", "ts-node")
+TEMPLATE_NAME = os.getenv("INSTANCE_TEMPLATE")
+STARTUP_SCRIPT = os.getenv("STARTUP_SCRIPT", "echo Startup Script was not provided.")
+
+if not PROJECT_ID or not TEMPLATE_NAME:
     raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
 
+
+def parse_startup_script(script: str) -> list:
+    pattern = r'__([A-Z_]+)__'
+    matches = re.findall(pattern, script)
+    return list(set(matches))
+
+def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
+    missing = [var for var in env_vars if var not in os.environ]
+    if missing:
+        raise ValueError(f"Missing required environment variables for startup script: {', '.join(missing)}")
+    return False
+
+def substitute_startup_script_vars(script: str) -> str:
+    env_vars = parse_startup_script(script)
+    if ensure_startup_required_substitutions(env_vars):
+        for var in env_vars:
+            script = script.replace(f"__{var}__", os.getenv(var, ""))
 
 def operation_create_instance_submission(client, request, callback):
     operation = client.insert(request=request)
     operation.result()
     if callback:
         callback(request.instance_resource.name)
+
+
 def operation_delete_instance_submission(client, request, callback):
     operation = client.delete(request=request)
     operation.result()
     if callback:
         callback(request.instance)
 
-def create_instance_from_template(auth_key: str, k3s_key: str, callback=None) -> str:
+
+def create_instance_from_template(callback=None) -> str:
     # Unique instance name
     unique_suffix = str(uuid.uuid4())[:8]
-    instance_name = f"{name_prefix}-{unique_suffix}"
+    instance_name = f"{NAME_PREFIX}-{unique_suffix}"
     print(f"Using instance name: {instance_name}")
 
     # Regional template path
     source_instance_template_url = (
-        f"projects/{project_id}/regions/us-west1/instanceTemplates/{template_name}"
+        f"projects/{PROJECT_ID}/regions/us-west1/instanceTemplates/{TEMPLATE_NAME}"
     )
 
     # Instance resource only needs the name (other props come from template)
     instance_resource = compute_v1.Instance(name=instance_name)
 
     # Inject startup script (replace placeholder with auth key)
-    if startup_script_template:
-        startup_script = (startup_script_template.replace("__TS_AUTHKEY__", auth_key)
-                          .replace("__K3S_KEY__", k3s_key)
-                          .replace("__INSTANCE_NAME__", instance_name))
+    if STARTUP_SCRIPT:
+        startup_script = (substitute_startup_script_vars(STARTUP_SCRIPT))
         metadata = compute_v1.Metadata()
         metadata.items = [compute_v1.Items(key="startup-script", value=startup_script)]
         instance_resource.metadata = metadata
     client = compute_v1.InstancesClient()
 
     request = compute_v1.InsertInstanceRequest(
-        project=project_id,
-        zone=zone,
+        project=PROJECT_ID,
+        ZONE=ZONE,
         instance_resource=instance_resource,
         source_instance_template=source_instance_template_url,
     )
@@ -57,12 +77,14 @@ def create_instance_from_template(auth_key: str, k3s_key: str, callback=None) ->
     creation_thread = threading.Thread(target=operation_create_instance_submission, args=(client, request, callback))
     creation_thread.start()
 
+    return instance_name
+
 
 def shutdown_instance(instance_name: str, callback=None):
     client = compute_v1.InstancesClient()
     request = compute_v1.DeleteInstanceRequest(
-        project=project_id,
-        zone=zone,
+        project=PROJECT_ID,
+        ZONE=ZONE,
         instance=instance_name,
     )
     deletion_thread = threading.Thread(target=operation_delete_instance_submission, args=(client, request, callback))

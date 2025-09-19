@@ -6,7 +6,7 @@ import sys
 import time
 import gce
 import k8s
-import tailscale
+import tailscale_provider
 
 app = FastAPI()
 
@@ -25,7 +25,7 @@ if missing:
 
 @app.get("/instance/new")
 def new_instance():
-    key_response = tailscale.request_key()
+    key_response = tailscale_provider.request_key()
     if "error" in key_response:
         return key_response
 
@@ -34,7 +34,7 @@ def new_instance():
         return {"error": "No key in response", "response": key_response}
 
     try:
-        instance_name = gce.create_instance_from_template(auth_key, K3S_KEY)
+        instance_name = gce.create_instance_from_template()
         return {"instance": instance_name}
     except Exception as e:
         return {"error": str(e)}
@@ -48,3 +48,6 @@ def delete_instance(instance_name: str):
         return {"instance": instance_name, "status": "deleted"}
     except Exception as e:
         return {"error": str(e)}
+
+if __name__ == '__main__':
+    tailscale_provider.start()

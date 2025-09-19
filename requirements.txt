@@ -3,3 +3,5 @@ uvicorn[standard]==0.30.1
 requests==2.32.3
 kubernetes==33.1.0
 google-cloud-compute
+protobuf~=6.32.0
+urllib3~=2.5.0
