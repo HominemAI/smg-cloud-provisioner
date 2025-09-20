@@ -47,4 +47,6 @@ def delete_instance(instance_name: str):
         return {"error": str(e)}
 
 if __name__ == '__main__':
+    print("start")
     tailscale_provider.start()
+    print("something")
