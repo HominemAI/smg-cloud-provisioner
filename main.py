@@ -1,10 +1,11 @@
+print("test")
 from fastapi import FastAPI
 import os
 import sys
 import gce
 import k8s
 import tailscale_provider
-prin("test")
+
 app = FastAPI()
 
 K3S_KEY = os.getenv("K3S_KEY")
