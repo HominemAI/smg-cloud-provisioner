@@ -1,9 +1,6 @@
 from fastapi import FastAPI
-import requests
 import os
-import base64
 import sys
-import time
 import gce
 import k8s
 import tailscale_provider

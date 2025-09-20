@@ -7,7 +7,7 @@ import asyncio
 from urllib3.exceptions import ReadTimeoutError
 from async_tools import AsyncSet
 
-config.load_kube_config()
+config.load_incluster_config()
 import signal
 
 v1 = client.CoreV1Api()
