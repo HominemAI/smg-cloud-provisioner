@@ -16,5 +16,4 @@ COPY . .
 # Install dependencies
 RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
-# Run FastAPI app with uvicorn
-CMD ["python3", "main:main"]
+CMD ["python3", "main.py"]
