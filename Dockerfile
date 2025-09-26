@@ -16,4 +16,4 @@ COPY . .
 # Install dependencies
 RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
-CMD ["python3", "main.py"]
+CMD ["python3", "-u", "main.py"]
