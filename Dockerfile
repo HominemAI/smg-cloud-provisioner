@@ -17,4 +17,4 @@ COPY . .
 RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Run FastAPI app with uvicorn
-CMD ["uvicorn", "main:main", "--host", "0.0.0.0", "--port", "80"]
+CMD ["python3", "main:main"]
