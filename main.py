@@ -2,11 +2,19 @@ import logging
 import sys
 import os
 
+# Configure logging first, before importing other modules
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True
 )
+
+# Set root logger level to ensure all modules log
+logging.getLogger().setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
+logger.info("Logging configured")
 
 try:
     import gce
