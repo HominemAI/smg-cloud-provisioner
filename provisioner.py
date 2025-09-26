@@ -1,9 +1,12 @@
+import logging
 import os
 import time
 
 import k8s
 import gce
 import tailscale
+
+logger = logging.getLogger(__name__)
 
 # How often to check the gpu pressure
 SCALER_INTERVAL = os.environ.get("SCALER_TIME_DELAY", "60")
@@ -21,7 +24,7 @@ IS_DEPROVISIONING = False
 PROVISIONING_TIME = time.time()
 
 def notify_creation_callback(instance_name: str):
-    print("Notifying creation callback")
+    logger.info("Notifying creation callback")
 
 
 def auto_scale():
@@ -38,7 +41,7 @@ def auto_scale():
                 IS_PROVISIONING = False
                 raise RuntimeError(f"Could not generate Tailscale key: {key_response}")
             instance_name = gce.create_instance_from_template(auth_key, os.getenv("K3S_KEY", ""), callback=notify_creation_callback)
-            print(f"Instance creation triggered: {instance_name} startup and registration in progress...")
+            logger.info(f"Instance creation triggered: {instance_name} startup and registration in progress...")
         else:
             if k8s.get_latest_node_time() > PROVISIONING_TIME:
                 IS_PROVISIONING = False
@@ -58,12 +61,12 @@ def auto_scale():
 
 def start_auto_scaler():
     global SCALER_INTERVAL
-    print(f"Starting auto-scaler with interval {SCALER_INTERVAL} seconds")
+    logger.info(f"Starting auto-scaler with interval {SCALER_INTERVAL} seconds")
     while True:
         try:
             k8s.update_nodes_list()
             k8s.update_pods_lists()
             auto_scale()
         except Exception as e:
-            print(f"Error in auto-scaler: {e}")
+            logger.error(f"Error in auto-scaler: {e}")
         time.sleep(int(SCALER_INTERVAL))

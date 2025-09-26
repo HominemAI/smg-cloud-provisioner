@@ -1,9 +1,12 @@
+import logging
 import os
 import sys
 import threading
 import time
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 TAILNET = os.getenv("TAILNET")
 OAUTH_ID = os.getenv("TS_OAUTH_ID")
@@ -55,7 +58,7 @@ def get_access_token():
     # Sets the env var for use by startup script parsing
     os.environ["TS_AUTHKEY"] = data["access_token"]
 
-    print("Fetched new access token, expires at " + time.ctime(TOKEN_CACHE["expires_at"]))
+    logger.info("Fetched new access token, expires at " + time.ctime(TOKEN_CACHE["expires_at"]))
     return TOKEN_CACHE["access_token"]
 
 
@@ -86,7 +89,7 @@ def request_key():
         r.raise_for_status()
     except requests.exceptions.HTTPError:
         return {"error": r.status_code, "response": r.text}
-    print("Requested new Tailscale Auth Key")
+    logger.info("Requested new Tailscale Auth Key")
     return r.json()
 
 

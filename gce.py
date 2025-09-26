@@ -1,8 +1,11 @@
+import logging
 import os
 import re
 import threading
 import uuid
 from google.cloud import compute_v1
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ID = os.getenv("GCP_PROJECT")
 ZONE = os.getenv("GCP_ZONE", "us-west1-a")
@@ -49,7 +52,7 @@ def create_instance_from_template(callback=None) -> str:
     # Unique instance name
     unique_suffix = str(uuid.uuid4())[:8]
     instance_name = f"{NAME_PREFIX}-{unique_suffix}"
-    print(f"Using instance name: {instance_name}")
+    logger.info(f"Using instance name: {instance_name}")
 
     # Regional template path
     source_instance_template_url = (
