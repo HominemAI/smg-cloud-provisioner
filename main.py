@@ -30,10 +30,4 @@ if missing:
     sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        logger.info("STARTUP: Application started successfully")
-        print("STARTUP: Application started successfully", flush=True)
-    except Exception as e:
-        logger.error(f"Application failed to start: {e}")
-        print(f"ERROR during startup: {e}", flush=True)
-        sys.exit(1)
+    logger.info("Application started successfully")
