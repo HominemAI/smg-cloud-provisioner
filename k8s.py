@@ -224,7 +224,5 @@ try:
 except Exception as e:
     logger.error(f"Error starting k8s watcher threads: {e}")
     raise e
-finally:
-    logger.info("k8s watcher shutdown complete.")
 
 

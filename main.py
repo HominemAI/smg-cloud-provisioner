@@ -1,6 +1,8 @@
 import logging
+import signal
 import sys
 import os
+import threading
 
 # Configure logging first, before importing other modules
 logging.basicConfig(
@@ -28,3 +30,11 @@ except ImportError as e:
     logger.error(f"Module import failed: {e}")
     sys.exit(1)
 logger.info("Hello I'm here!")
+
+# Wait for SIGTERM to gracefully shutdown
+shutdown_event = threading.Event()
+signal.signal(signal.SIGTERM, lambda s, f: shutdown_event.set())
+
+logger.info("Waiting for termination signal...")
+shutdown_event.wait()
+logger.info("Received SIGTERM, shutting down")
