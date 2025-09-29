@@ -28,6 +28,7 @@ def notify_creation_callback(instance_name: str):
 
 
 def auto_scale():
+    logger.info("Checking auto-scaling conditions...")
     global IS_PROVISIONING, IS_DEPROVISIONING, PROVISIONING_TIME, SCALER_PROVISIONING_TIMEOUT
     if k8s.get_current_node_count() < len(k8s.GPU_PODS):
         if not IS_PROVISIONING:
@@ -40,7 +41,7 @@ def auto_scale():
             if not auth_key:
                 IS_PROVISIONING = False
                 raise RuntimeError(f"Could not generate Tailscale key: {key_response}")
-            instance_name = gce.create_instance_from_template(auth_key, os.getenv("K3S_KEY", ""), callback=notify_creation_callback)
+            instance_name = gce.create_instance_from_template(callback=notify_creation_callback)
             logger.info(f"Instance creation triggered: {instance_name} startup and registration in progress...")
         else:
             if k8s.get_latest_node_time() > PROVISIONING_TIME:
