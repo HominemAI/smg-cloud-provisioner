@@ -3,7 +3,6 @@ import signal
 import sys
 import os
 import threading
-
 # Configure logging first, before importing other modules
 logging.basicConfig(
     level=logging.INFO,
@@ -18,6 +17,7 @@ logging.getLogger().setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 logger.info("Logging configured")
 
+# /\/\/\/\/\/\/\ IMPORT & START SERVICES\/\/\/\/\/\/\/\/\/\
 try:
     logger.info("Activating GCE")
     import gce
@@ -25,11 +25,14 @@ try:
     import k8s
     logger.info("Activating tailscale provider")
     import tailscale_provider
+    logger.info("Activating provisioner")
+    import provisioner
+    provisioner.start_auto_scaler()
     logger.info("Modules imported successfully")
 except ImportError as e:
     logger.error(f"Module import failed: {e}")
     sys.exit(1)
-logger.info("Hello I'm here!")
+
 
 # Wait for SIGTERM to gracefully shutdown
 shutdown_event = threading.Event()
