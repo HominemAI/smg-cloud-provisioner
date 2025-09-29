@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import signal
+import threading
 import time
 from typing import List
 from kubernetes import client, config, watch
@@ -202,20 +203,28 @@ def shutdown(loop: asyncio.AbstractEventLoop):
     logger.info("Shutting down...")
     for task in asyncio.all_tasks(loop):
         task.cancel()
-    loop.stop()
+        loop.stop()
+
+def run_loop():
+  new_loop = asyncio.new_event_loop()
+  try:
+      asyncio.set_event_loop(new_loop)
+      new_loop.create_task(pods())
+      new_loop.create_task(nodes())
+      new_loop.run_forever()
+  except Exception as e:
+      shutdown(new_loop)
+      raise e
 
 
-loop = asyncio.get_event_loop()
-
-for sig in (signal.SIGINT, signal.SIGTERM):
-    loop.add_signal_handler(sig, shutdown, loop)
 
 try:
-    loop.create_task(pods())
-    loop.create_task(nodes())
-    loop.run_forever()
-except KeyboardInterrupt:
-    shutdown(loop)
+    thread = threading.Thread(target=run_loop, daemon=True)
+    thread.start()
+except Exception as e:
+    logger.error(f"Error starting k8s watcher threads: {e}")
+    raise e
 finally:
-    loop.close()
-    logger.info("Shutdown complete.")
+    logger.info("k8s watcher shutdown complete.")
+
+
