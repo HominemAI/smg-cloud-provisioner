@@ -38,3 +38,7 @@ class AsyncSet:
     # Not thread-safe, use with caution
     def __len__(self):
         return len(self._set)
+
+    def __sub__(self, other):
+        with self._lock:
+            return self._set - other._set
