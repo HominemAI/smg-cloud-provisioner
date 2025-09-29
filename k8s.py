@@ -110,7 +110,7 @@ def update_pods_lists():
                 logger.info("Pod with node detected")
                 UNSCHEDULED_GPU_PODS.remove(pod)
                 logger.info(f"Pod scheduled: {pod.name} in namespace {pod.namespace}")
-    UNSCHEDULED_GPU_PODS = UNSCHEDULED_GPU_PODS - set(pods)
+    UNSCHEDULED_GPU_PODS = UNSCHEDULED_GPU_PODS - pods
 
 
 def add_node_to_pool(node: object, source="watch") -> None:
