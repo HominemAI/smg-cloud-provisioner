@@ -57,13 +57,9 @@ def start_auto_scaler():
     logger.info(f"Starting auto-scaler with interval {SCALER_INTERVAL} seconds")
     while True:
         try:
-            logger.info(f"Starting auto-scaler with interval {SCALER_INTERVAL} seconds")
             k8s.update_nodes_list()
-            logger.info(f"Nodes list updated")
             k8s.update_pods_lists()
-            logger.info(f"Pods list updated")
             auto_scale()
-            logger.info(f"Auto scaling completed")
         except Exception as e:
             logger.error(f"Error in auto-scaler: {e}")
         time.sleep(int(SCALER_INTERVAL))

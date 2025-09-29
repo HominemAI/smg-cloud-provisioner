@@ -58,12 +58,10 @@ def deregister_k8s_node(instance_identifier: str):
 
 
 def pod_gpu_count(pod: object) -> int:
-    logger.info(1)
     added = sum(
         int(c.resources.limits.get("nvidia.com/gpu", 0)) for c in pod.spec.containers
         if c.resources and c.resources.limits
     )
-    logger.info(2)
     return added
 
 
@@ -91,25 +89,16 @@ def on_pod_deleted(pod: object) -> None:
 
 def update_pods_lists():
     global UNSCHEDULED_GPU_PODS, GPU_PODS
-    logger.info("Updating pods lists")
     pods = v1.list_pod_for_all_namespaces(_request_timeout=60, watch=False).items
-    logger.info(f"pods: {pods}")
     for pod in pods:
-        logger.info(f"Updating pod {pod.metadata.name}")
         total_gpus = pod_gpu_count(pod)
-        logger.info(f"Total GPUs: {total_gpus}")
         if total_gpus > 0:
-            logger.info("GPU pod detected")
             GPU_PODS.add(pod)
             logger.info(f"Pod added: {pod.metadata.name} in namespace {pod.metadata.namespace}")
             if not pod.node_name and pod not in UNSCHEDULED_GPU_PODS:
-                logger.info("Pod without node detected")
                 UNSCHEDULED_GPU_PODS.add(pod)
-                logger.info(f"Pod added: {pod.name} in namespace {pod.namespace}")
             elif pod.node_name and pod in UNSCHEDULED_GPU_PODS:
-                logger.info("Pod with node detected")
                 UNSCHEDULED_GPU_PODS.remove(pod)
-                logger.info(f"Pod scheduled: {pod.name} in namespace {pod.namespace}")
     UNSCHEDULED_GPU_PODS = UNSCHEDULED_GPU_PODS - pods
 
 
