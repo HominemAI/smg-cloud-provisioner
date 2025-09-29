@@ -136,7 +136,7 @@ def request_node_removal(qty: int = 1) -> dict | bool:
     global NODE_POOL
     pods: list = get_all_active_pods()
     for node in NODE_POOL.to_list():
-        node_pods = [pod for pod in pods if pod.spec.node_name == node.metadata.name]
+        node_pods = [pod for pod in pods if pod.spec.node_name and pod.spec.node_name == node.metadata.name]
         if node_pods:
             continue
         remove_node_from_pool(node)
