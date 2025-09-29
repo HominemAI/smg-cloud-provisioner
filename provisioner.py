@@ -4,9 +4,9 @@ import time
 
 import k8s
 import gce
-import tailscale
 
 logger = logging.getLogger(__name__)
+logger.info("Starting Kubernetes Provisioner")
 
 # How often to check the gpu pressure
 SCALER_INTERVAL = os.environ.get("SCALER_TIME_DELAY", "60")
@@ -33,14 +33,6 @@ def auto_scale():
     if k8s.get_current_node_count() < len(k8s.GPU_PODS):
         if not IS_PROVISIONING:
             IS_PROVISIONING = True
-            key_response = tailscale.request_key()
-            if "error" in key_response:
-                IS_PROVISIONING = False
-                raise RuntimeError(f"Could not generate Tailscale key: {key_response}")
-            auth_key = key_response.get("key")
-            if not auth_key:
-                IS_PROVISIONING = False
-                raise RuntimeError(f"Could not generate Tailscale key: {key_response}")
             instance_name = gce.create_instance_from_template(callback=notify_creation_callback)
             logger.info(f"Instance creation triggered: {instance_name} startup and registration in progress...")
         else:
