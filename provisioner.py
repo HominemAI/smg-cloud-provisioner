@@ -61,5 +61,5 @@ def start_auto_scaler():
             k8s.update_pods_lists()
             auto_scale()
         except Exception as e:
-            logger.error(f"Error in auto-scaler: {e}")
+            logger.exception(f"Error in auto-scaler:")
         time.sleep(int(SCALER_INTERVAL))
