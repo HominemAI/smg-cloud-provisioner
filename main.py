@@ -17,25 +17,14 @@ logger = logging.getLogger(__name__)
 logger.info("Logging configured")
 
 try:
+    logger.info("Activating GCE")
     import gce
+    logger.info("Activating K8s interface")
     import k8s
+    logger.info("Activating tailscale provider")
     import tailscale_provider
     logger.info("Modules imported successfully")
 except ImportError as e:
     logger.error(f"Module import failed: {e}")
     sys.exit(1)
-
-K3S_KEY = os.getenv("K3S_KEY")
-PORT = int(os.getenv("PORT", "80"))
-
-missing = []
-
-if not K3S_KEY:
-    missing.append("K3S_KEY")
-
-if missing:
-    logger.error(f"Missing required environment variables: {', '.join(missing)}")
-    sys.exit(1)
-
-if __name__ == "__main__":
-    logger.info("Application started successfully")
+logger.info("Hello I'm here!")
