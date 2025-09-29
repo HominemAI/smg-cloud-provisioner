@@ -95,9 +95,10 @@ def update_pods_lists():
         if total_gpus > 0:
             GPU_PODS.add(pod)
             logger.info(f"Pod added: {pod.metadata.name} in namespace {pod.metadata.namespace}")
-            if not pod.node_name and pod not in UNSCHEDULED_GPU_PODS:
+            node_name = getattr(pod.spec, 'node_name', None)
+            if not node_name and pod not in UNSCHEDULED_GPU_PODS:
                 UNSCHEDULED_GPU_PODS.add(pod)
-            elif pod.node_name and pod in UNSCHEDULED_GPU_PODS:
+            elif node_name and pod in UNSCHEDULED_GPU_PODS:
                 UNSCHEDULED_GPU_PODS.remove(pod)
     UNSCHEDULED_GPU_PODS = UNSCHEDULED_GPU_PODS - pods
 
