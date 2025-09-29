@@ -58,10 +58,12 @@ def deregister_k8s_node(instance_identifier: str):
 
 
 def pod_gpu_count(pod: object) -> int:
+    logger.info(1)
     added = sum(
-        c.resources.limits.get("nvidia.com/gpu", 0) for c in pod.spec.containers
+        int(c.resources.limits.get("nvidia.com/gpu", 0)) for c in pod.spec.containers
         if c.resources and c.resources.limits
     )
+    logger.info(2)
     return added
 
 
