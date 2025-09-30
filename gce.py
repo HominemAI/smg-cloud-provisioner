@@ -32,9 +32,10 @@ def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
 def substitute_startup_script_vars(script: str) -> str:
     sub_script = script
     env_vars = parse_startup_script(script)
-    logger.info(sub_script)
+    logger.info(env_vars)
     if ensure_startup_required_substitutions(env_vars):
         for var in env_vars:
+            logger.info(f"Substituting {var} for startup script")
             sub_script = sub_script.replace(f"__{var}__", os.getenv(var, ""))
             logger.info(sub_script)
     return sub_script
