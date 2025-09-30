@@ -32,9 +32,11 @@ def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
 def substitute_startup_script_vars(script: str) -> str:
     sub_script = script
     env_vars = parse_startup_script(script)
+    logger.info(sub_script)
     if ensure_startup_required_substitutions(env_vars):
         for var in env_vars:
             sub_script = sub_script.replace(f"__{var}__", os.getenv(var, ""))
+            logger.info(sub_script)
     return sub_script
 
 def operation_create_instance_submission(client, request, callback):
@@ -66,8 +68,6 @@ def create_instance_from_template(callback=None) -> str:
     instance_resource = compute_v1.Instance(name=instance_name)
 
     # Inject startup script (replace placeholder with auth key)
-    logger.info(STARTUP_SCRIPT)
-    logger.info(substitute_startup_script_vars(STARTUP_SCRIPT))
     if STARTUP_SCRIPT:
         startup_script = (substitute_startup_script_vars(STARTUP_SCRIPT))
         metadata = compute_v1.Metadata()
