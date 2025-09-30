@@ -1,3 +1,4 @@
+# AI disclosure: AI was used to grunt out the removal of terminated pods from tracking
 import asyncio
 import logging
 import os
@@ -67,6 +68,10 @@ def pod_gpu_count(pod: object) -> int:
 
 def on_pod_added(pod: object) -> None:
     global UNSCHEDULED_GPU_PODS, GPU_PODS
+    # Skip terminated pods (Succeeded or Failed)
+    if pod.status.phase in ("Succeeded", "Failed"):
+        return
+
     gpu_count = pod_gpu_count(pod)
     if gpu_count > 0:
         if not pod.spec.node_name and pod not in UNSCHEDULED_GPU_PODS:
@@ -75,13 +80,24 @@ def on_pod_added(pod: object) -> None:
             logger.info(f"Pod added: {pod.metadata.name} in namespace {pod.metadata.namespace}")
 
 
+def on_pod_modified(pod: object) -> None:
+    global GPU_PODS, UNSCHEDULED_GPU_PODS
+    # If pod transitioned to terminal state, remove it from tracking
+    if pod.status.phase in ("Succeeded", "Failed"):
+        if pod in UNSCHEDULED_GPU_PODS:
+            UNSCHEDULED_GPU_PODS.remove(pod)
+            logger.info(f"Pod terminated (unscheduled): {pod.metadata.name} in namespace {pod.metadata.namespace}")
+        if pod in GPU_PODS:
+            GPU_PODS.remove(pod)
+            logger.info(f"Pod terminated: {pod.metadata.name} in namespace {pod.metadata.namespace}")
+
+
 def on_pod_deleted(pod: object) -> None:
     global GPU_PODS, UNSCHEDULED_GPU_PODS
     gpu_count = pod_gpu_count(pod)
     if gpu_count > 0:
         if pod in UNSCHEDULED_GPU_PODS:
             UNSCHEDULED_GPU_PODS.remove(pod)
-            GPU_PODS.add(pod)
             logger.info(f"Pod deleted: {pod.metadata.name} in namespace {pod.metadata.namespace}")
         if pod in GPU_PODS:
             GPU_PODS.remove(pod)
@@ -90,7 +106,21 @@ def on_pod_deleted(pod: object) -> None:
 def update_pods_lists():
     global UNSCHEDULED_GPU_PODS, GPU_PODS
     pods = v1.list_pod_for_all_namespaces(_request_timeout=60, watch=False).items
+
+    # First pass: remove terminated pods from tracking
+    for pod in GPU_PODS.to_list():
+        if pod.status.phase in ("Succeeded", "Failed"):
+            if pod in UNSCHEDULED_GPU_PODS:
+                UNSCHEDULED_GPU_PODS.remove(pod)
+            GPU_PODS.remove(pod)
+            logger.info(f"Removing terminated pod from tracking: {pod.metadata.name}")
+
+    # Second pass: add/update active GPU pods
     for pod in pods:
+        # Skip terminated pods (Succeeded or Failed)
+        if pod.status.phase in ("Succeeded", "Failed"):
+            continue
+
         total_gpus = pod_gpu_count(pod)
         if total_gpus > 0:
             GPU_PODS.add(pod)
@@ -161,6 +191,9 @@ async def pods():
                 case 'ADDED':
                     logger.debug("Event: %s %s" % (event['type'], event['object'].metadata.name))
                     on_pod_added(event['object'])
+                case 'MODIFIED':
+                    logger.debug("Event: %s %s" % (event['type'], event['object'].metadata.name))
+                    on_pod_modified(event['object'])
                 case 'DELETED':
                     logger.debug("Event: %s %s" % (event['type'], event['object'].metadata.name))
                     on_pod_deleted(event['object'])
