@@ -20,6 +20,7 @@ if not PROJECT_ID or not TEMPLATE_NAME:
 def parse_startup_script(script: str) -> list:
     pattern = r'__([A-Z_]+)__'
     matches = re.findall(pattern, script)
+    print(matches)
     return list(set(matches))
 
 def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
@@ -29,10 +30,12 @@ def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
     return False
 
 def substitute_startup_script_vars(script: str) -> str:
+    sub_script = script
     env_vars = parse_startup_script(script)
     if ensure_startup_required_substitutions(env_vars):
         for var in env_vars:
-            script = script.replace(f"__{var}__", os.getenv(var, ""))
+            sub_script = sub_script.replace(f"__{var}__", os.getenv(var, ""))
+    return sub_script
 
 def operation_create_instance_submission(client, request, callback):
     operation = client.insert(request=request)
