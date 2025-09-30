@@ -72,7 +72,7 @@ def create_instance_from_template(callback=None) -> str:
 
     request = compute_v1.InsertInstanceRequest(
         project=PROJECT_ID,
-        ZONE=ZONE,
+        zone=ZONE,
         instance_resource=instance_resource,
         source_instance_template=source_instance_template_url,
     )
