@@ -63,6 +63,8 @@ def create_instance_from_template(callback=None) -> str:
     instance_resource = compute_v1.Instance(name=instance_name)
 
     # Inject startup script (replace placeholder with auth key)
+    logger.info(STARTUP_SCRIPT)
+    logger.info(substitute_startup_script_vars(STARTUP_SCRIPT))
     if STARTUP_SCRIPT:
         startup_script = (substitute_startup_script_vars(STARTUP_SCRIPT))
         metadata = compute_v1.Metadata()
@@ -87,7 +89,7 @@ def shutdown_instance(instance_name: str, callback=None):
     client = compute_v1.InstancesClient()
     request = compute_v1.DeleteInstanceRequest(
         project=PROJECT_ID,
-        ZONE=ZONE,
+        zone=ZONE,
         instance=instance_name,
     )
     deletion_thread = threading.Thread(target=operation_delete_instance_submission, args=(client, request, callback))
