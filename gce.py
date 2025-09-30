@@ -27,7 +27,7 @@ def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
     missing = [var for var in env_vars if var not in os.environ]
     if missing:
         raise ValueError(f"Missing required environment variables for startup script: {', '.join(missing)}")
-    return False
+    return True
 
 def substitute_startup_script_vars(script: str) -> str:
     sub_script = script
