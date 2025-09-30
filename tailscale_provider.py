@@ -7,6 +7,7 @@ import time
 import requests
 
 logger = logging.getLogger(__name__)
+_ready = threading.Event()
 
 TAILNET = os.getenv("TAILNET")
 OAUTH_ID = os.getenv("TS_OAUTH_ID")
@@ -96,9 +97,15 @@ def request_key():
 def token_refresh():
     while True:
         get_access_token()
+        if TOKEN_CACHE["access_token"]:
+            _ready.set()
         time.sleep(TS_KEY_EXPIRY)
 
 
 def start():
-    thread = threading.Thread(target=token_refresh)
+    thread = threading.Thread(target=token_refresh, daemon=True)
     thread.start()
+    logger.info("Waiting for Tailscale to be ready...")
+    _ready.wait()
+    logger.info("Tailscale provider ready")
+
