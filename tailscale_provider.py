@@ -33,6 +33,11 @@ TOKEN_CACHE = {
     "expires_at": 0
 }
 
+KEY_CACHE = {
+    "auth_key": None,
+    "expires_at": 0
+}
+
 
 def get_access_token():
     global TOKEN_CACHE, TS_KEY_EXPIRY
@@ -56,15 +61,18 @@ def get_access_token():
     TOKEN_CACHE["access_token"] = data["access_token"]
     TOKEN_CACHE["expires_at"] = now + int(data.get("expires_in", TS_KEY_EXPIRY))
 
-    # Sets the env var for use by startup script parsing
-    os.environ["TS_AUTHKEY"] = data["access_token"]
-
     logger.info("Fetched new access token, expires at " + time.ctime(TOKEN_CACHE["expires_at"]))
     return TOKEN_CACHE["access_token"]
 
 
 def request_key():
-    global TOKEN_CACHE
+    global KEY_CACHE
+    now = int(time.time())
+
+    # Check if we have a valid cached key
+    if KEY_CACHE["auth_key"] and KEY_CACHE["expires_at"] > now + 30:
+        return {"key": KEY_CACHE["auth_key"]}
+
     access_token = get_access_token()
 
     url = f"https://api.tailscale.com/api/v2/tailnet/{TAILNET}/keys"
@@ -90,15 +98,28 @@ def request_key():
         r.raise_for_status()
     except requests.exceptions.HTTPError:
         return {"error": r.status_code, "response": r.text}
+
     logger.info("Requested new Tailscale Auth Key")
-    return r.json()
+    data = r.json()
+
+    # Cache the key
+    KEY_CACHE["auth_key"] = data.get("key", "")
+    KEY_CACHE["expires_at"] = now + TS_KEY_EXPIRY
+
+    # Set env var for startup script parsing
+    os.environ["TS_AUTHKEY"] = KEY_CACHE["auth_key"]
+
+    return data
 
 
 def token_refresh():
     while True:
         get_access_token()
         if TOKEN_CACHE["access_token"]:
-            _ready.set()
+            # Now request the actual Tailscale auth key
+            key_response = request_key()
+            if "key" in key_response:  # Success
+                _ready.set()
         time.sleep(TS_KEY_EXPIRY)
 
 
