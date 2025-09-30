@@ -37,7 +37,6 @@ def substitute_startup_script_vars(script: str) -> str:
         for var in env_vars:
             logger.info(f"Substituting {var} for startup script")
             sub_script = sub_script.replace(f"__{var}__", os.getenv(var, ""))
-            logger.info(sub_script)
     return sub_script
 
 def operation_create_instance_submission(client, request, callback):
