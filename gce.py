@@ -18,7 +18,7 @@ if not PROJECT_ID or not TEMPLATE_NAME:
 
 
 def parse_startup_script(script: str) -> list:
-    pattern = r'__([A-Z_]+)__'
+    pattern = r'__([A-Za-z0-9_]+)__'
     matches = re.findall(pattern, script)
     print(matches)
     return list(set(matches))
