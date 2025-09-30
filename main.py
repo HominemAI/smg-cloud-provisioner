@@ -25,6 +25,7 @@ try:
     import k8s
     logger.info("Activating tailscale provider")
     import tailscale_provider
+    tailscale_provider.start()
     logger.info("Activating provisioner")
     import provisioner
     provisioner.start_auto_scaler()
