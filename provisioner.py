@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.info("Starting Kubernetes Provisioner")
 
 # How often to check the gpu pressure
-SCALER_INTERVAL = os.environ.get("SCALER_TIME_DELAY", "60")
+SCALER_INTERVAL = os.environ.get("SCALER_TIME_DELAY", "120")
 MAX_NODES = os.environ.get("SCALER_MAX_NODES", "2")
 MIN_NODES = os.environ.get("SCALER_MIN_NODES", "0")
 SCALER_PROVISIONING_TIMEOUT = int(os.environ.get("SCALER_PROVISIONING_TIMEOUT", "300"))
@@ -31,11 +31,15 @@ def auto_scale():
     logger.info("Checking auto-scaling conditions...")
     global IS_PROVISIONING, IS_DEPROVISIONING, PROVISIONING_TIME, SCALER_PROVISIONING_TIMEOUT
     if k8s.get_current_node_count() < len(k8s.GPU_PODS):
+        logger.info("Pressure detected: More GPU pods than nodes.")
         if not IS_PROVISIONING:
+            logger.info("No provisioning in progress, starting new instance creation.")
             IS_PROVISIONING = True
             instance_name = gce.create_instance_from_template(callback=notify_creation_callback)
             logger.info(f"Instance creation triggered: {instance_name} startup and registration in progress...")
         else:
+            logger.info(f"Last node time: {k8s.get_latest_node_time()} vs {PROVISIONING_TIME}")
+            logger.info(f"{time.time() - PROVISIONING_TIME} vs {SCALER_PROVISIONING_TIMEOUT}")
             if k8s.get_latest_node_time() > PROVISIONING_TIME:
                 IS_PROVISIONING = False
                 PROVISIONING_TIME = time.time()
