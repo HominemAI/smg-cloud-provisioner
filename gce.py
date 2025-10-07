@@ -17,10 +17,13 @@ if not PROJECT_ID or not TEMPLATE_NAME:
     raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
 
 
-def parse_startup_script(script: str) -> list:
+def parse_startup_script(script: str) -> tuple:
     pattern = r'__([A-Za-z0-9_]+)__'
     matches = re.findall(pattern, script)
-    return list(set(matches))
+    pattern = r'\{\{([A-Za-z0-9_]+)\}\}'
+    dynamic_matches = re.findall(pattern, script)
+    return list(set(matches)), list(set(dynamic_matches))
+
 
 def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
     missing = [var for var in env_vars if var not in os.environ]
@@ -28,14 +31,30 @@ def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
         raise ValueError(f"Missing required environment variables for startup script: {', '.join(missing)}")
     return True
 
-def substitute_startup_script_vars(script: str) -> str:
+
+def ensure_startup_dynamic_substitutions(dynamic_vars: list[str], dynamic_values: dict) -> bool:
+    missing = [var for var in dynamic_vars if var not in dynamic_values]
+    if missing:
+        raise ValueError(f"Missing required dynamic values for startup script: {', '.join(missing)}")
+    return True
+
+
+def substitute_startup_script_vars(script: str, dynamic_values: dict = None) -> str:
     sub_script = script
-    env_vars = parse_startup_script(script)
+    env_vars, dynamic_vars = parse_startup_script(script)
+    logger.info(f"Substituting startup dynamic variables: {dynamic_vars}")
     logger.info(f"Looking for following Env Variables: {str(env_vars)}")
+
     if ensure_startup_required_substitutions(env_vars):
         for var in env_vars:
-            sub_script = sub_script.replace(f"__{var}__", os.getenv(var, ""))
+            sub_script = sub_script.replace(f"__{var}__", os.environ[var])
+
+    if dynamic_values and ensure_startup_dynamic_substitutions(dynamic_vars, dynamic_values):
+        for key, value in dynamic_values.items():
+            sub_script = sub_script.replace('{{' + key + '}}', value)
+
     return sub_script
+
 
 def operation_create_instance_submission(client, request, callback):
     operation = client.insert(request=request)
@@ -67,7 +86,11 @@ def create_instance_from_template(callback=None) -> str:
 
     # Inject startup script (replace placeholder with auth key)
     if STARTUP_SCRIPT:
-        startup_script = (substitute_startup_script_vars(STARTUP_SCRIPT))
+        startup_script = (substitute_startup_script_vars(STARTUP_SCRIPT,
+                                                         {
+                                                             "INSTANCE_NAME": instance_name,
+                                                             "INSTANCE_PROVIDER": "gce"
+                                                         }))
         metadata = compute_v1.Metadata()
         metadata.items = [compute_v1.Items(key="startup-script", value=startup_script)]
         instance_resource.metadata = metadata
