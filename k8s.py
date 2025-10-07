@@ -30,6 +30,8 @@ LATEST_NODE_TIME = time.time()
 
 
 def get_current_node_count() -> int:
+    logger.info(len(NODE_POOL.to_list()))
+    logger.info(NODE_POOL.to_list())
     return NODE_POOL.size()
 
 
@@ -68,12 +70,13 @@ def pod_gpu_count(pod: object) -> int:
 
 def on_pod_added(pod: object) -> None:
     global UNSCHEDULED_GPU_PODS, GPU_PODS
-    # Skip terminated pods (Succeeded or Failed)
     if pod.status.phase in ("Succeeded", "Failed"):
+        logger.info(f"Skipping terminated pod: {pod.metadata.name} in namespace {pod.metadata.namespace}")
         return
 
     gpu_count = pod_gpu_count(pod)
     if gpu_count > 0:
+        logger.info(f"GPU pod detected: pod {pod.metadata.name} requests {gpu_count} GPUs")
         if not pod.spec.node_name and pod not in UNSCHEDULED_GPU_PODS:
             UNSCHEDULED_GPU_PODS.add(pod)
             GPU_PODS.add(pod)
@@ -136,7 +139,7 @@ def update_pods_lists():
 
 def add_node_to_pool(node: object, source="watch") -> None:
     global NODE_POOL, LATEST_NODE_TIME
-    if node not in NODE_POOL:  # Only if truly new
+    if node not in NODE_POOL:
         NODE_POOL.add(node)
         LATEST_NODE_TIME = time.time()  # New node detected
         logger.info(f"New node added from {source}: {node.metadata.name}")
