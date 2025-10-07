@@ -35,8 +35,6 @@ LATEST_NODE_TIME = time.time()
 
 
 def get_current_node_count() -> int:
-    logger.info(len(NODE_POOL.to_list()))
-    logger.info(NODE_POOL.to_list())
     return NODE_POOL.size()
 
 
@@ -225,11 +223,11 @@ async def nodes():
         for event in w.stream(v1.list_node, resource_version=resource_version, _request_timeout=60):
             match event['type']:
                 case 'DELETED':
-                    logger.info("Event: %s %s" % (event['type'], event['object'].metadata.name))
+                    logger.debug("Event: %s %s" % (event['type'], event['object'].metadata.name))
 
                 case 'ADDED':
-                    logger.info("Event: %s %s" % (event['type'], event['object'].metadata.name))
-                    logger.info(f"{event['object'].metadata.labels}")
+                    logger.debug("Event: %s %s" % (event['type'], event['object'].metadata.name))
+                    logger.debug(f"{event['object'].metadata.labels}")
                     if event['object'].metadata.labels.get(NODE_ROLE_LABEL) == NODE_ROLE_LABEL_VALUE:
                         add_node_to_pool(event['object'])
                 case _:
