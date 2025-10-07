@@ -220,10 +220,11 @@ async def nodes():
         for event in w.stream(v1.list_node, resource_version=resource_version, _request_timeout=60):
             match event['type']:
                 case 'DELETED':
-                    logger.debug("Event: %s %s" % (event['type'], event['object'].metadata.name))
+                    logger.info("Event: %s %s" % (event['type'], event['object'].metadata.name))
 
                 case 'ADDED':
-                    logger.debug("Event: %s %s" % (event['type'], event['object'].metadata.name))
+                    logger.info("Event: %s %s" % (event['type'], event['object'].metadata.name))
+                    logger.info(f"{event['object'].metadata.labels}")
                     if event['object'].metadata.labels.get(NODE_ROLE_LABEL) == NODE_ROLE_LABEL_VALUE:
                         add_node_to_pool(event['object'])
                 case _:
