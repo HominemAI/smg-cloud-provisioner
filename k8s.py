@@ -180,10 +180,13 @@ def request_node_removal(qty: int = 1) -> dict | bool:
         if node_pods:
             continue
         remove_node_from_pool(node)
+        logger.info(
+            f"Node removed: {node.metadata.name} - {node.metadata.labels.get(INSTANCE_PROVIDER_LABEL)} = {node.metadata.labels.get(INSTANCE_IDENTIFIER_LABEL)}")
         return {
             "provider": node.metadata.labels.get(INSTANCE_PROVIDER_LABEL),
             "identifier": node.metadata.labels.get(INSTANCE_IDENTIFIER_LABEL)
         }
+    logger.info(f"Requesting node removal failed. - No idle nodes available.")
     return False
 
 
