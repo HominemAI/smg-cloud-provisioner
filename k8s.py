@@ -44,7 +44,8 @@ def get_current_gpu_pod_count() -> int:
 
 def get_all_active_pods() -> List:
     pods = v1.list_pod_for_all_namespaces(
-        field_selector=f"metadata.namespace notin (kube-system,kube-public), watch=False").items
+        field_selector="metadata.namespace!=kube-system,metadata.namespace!=kube-public",
+        watch=False).items
     active_pods = []
     for pod in pods:
         if pod.spec.node_name and pod.metadata.owner_references:
