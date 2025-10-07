@@ -13,6 +13,16 @@ from async_tools import AsyncSet
 
 logger = logging.getLogger(__name__)
 
+os.environ.setdefault('NODE_ROLE_LABEL', "smgp-role")
+os.environ.setdefault('NODE_ROLE_LABEL_VALUE', "gpu")
+os.environ.setdefault('INSTANCE_PROVIDER_LABEL', "smgp-instance-provider")
+os.environ.setdefault('INSTANCE_IDENTIFIER_LABEL', "smgp-instance-identifier")
+
+NODE_ROLE_LABEL = os.environ['NODE_ROLE_LABEL']
+NODE_ROLE_LABEL_VALUE = os.environ['NODE_ROLE_LABEL_VALUE']
+INSTANCE_PROVIDER_LABEL = os.environ['INSTANCE_PROVIDER_LABEL']
+INSTANCE_IDENTIFIER_LABEL = os.environ['INSTANCE_IDENTIFIER_LABEL']
+
 config.load_incluster_config()
 
 v1 = client.CoreV1Api()
@@ -20,11 +30,6 @@ v1 = client.CoreV1Api()
 NODE_POOL = AsyncSet()
 GPU_PODS = AsyncSet()
 UNSCHEDULED_GPU_PODS = AsyncSet()
-
-NODE_ROLE_LABEL = os.getenv('NODE_OWNER_LABEL', "smgp-role")
-NODE_ROLE_LABEL_VALUE = os.getenv('NODE_ROLE_LABEL_VALUE', "gpu")
-INSTANCE_PROVIDER_LABEL = os.getenv('INSTANCE_PROVIDER_LABEL', "smgp-instance-provider")
-INSTANCE_IDENTIFIER_LABEL = os.getenv('INSTANCE_IDENTIFIER_LABEL', "smgp-instance-identifier")
 
 LATEST_NODE_TIME = time.time()
 
@@ -245,17 +250,17 @@ def shutdown(loop: asyncio.AbstractEventLoop):
         task.cancel()
         loop.stop()
 
-def run_loop():
-  new_loop = asyncio.new_event_loop()
-  try:
-      asyncio.set_event_loop(new_loop)
-      new_loop.create_task(pods())
-      new_loop.create_task(nodes())
-      new_loop.run_forever()
-  except Exception as e:
-      shutdown(new_loop)
-      raise e
 
+def run_loop():
+    new_loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(new_loop)
+        new_loop.create_task(pods())
+        new_loop.create_task(nodes())
+        new_loop.run_forever()
+    except Exception as e:
+        shutdown(new_loop)
+        raise e
 
 
 try:
@@ -264,5 +269,3 @@ try:
 except Exception as e:
     logger.error(f"Error starting k8s watcher threads: {e}")
     raise e
-
-
