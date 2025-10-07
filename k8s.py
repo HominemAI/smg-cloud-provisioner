@@ -104,6 +104,7 @@ def on_pod_deleted(pod: object) -> None:
 
 
 def update_pods_lists():
+    logger.info("Updating pods lists.")
     global UNSCHEDULED_GPU_PODS, GPU_PODS
     pods = v1.list_pod_for_all_namespaces(_request_timeout=60, watch=False).items
 
@@ -154,6 +155,7 @@ def get_latest_node_time() -> float:
 
 
 def update_nodes_list():
+    logger.info(f"Updating nodes list.")
     global LATEST_NODE_TIME, NODE_POOL
     nodes = v1.list_node(label_selector=f"{NODE_ROLE_LABEL}={NODE_ROLE_LABEL_VALUE}", _request_timeout=60).items
     for node in nodes:
