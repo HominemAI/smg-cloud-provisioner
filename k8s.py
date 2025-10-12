@@ -146,7 +146,7 @@ def add_node_to_pool(node: object, source="watch") -> None:
     if node not in NODE_POOL:
         NODE_POOL.add(node)
         LATEST_NODE_TIME = time.time()  # New node detected
-        logger.info(f"New node added from {source}: {node.metadata.name}")
+        logger.debug(f"New node added from {source}: {node.metadata.name}")
 
 
 def remove_node_from_pool(node: object) -> None:
@@ -169,7 +169,6 @@ def update_nodes_list():
         if len(nodes) > NODE_POOL.size():
             LATEST_NODE_TIME = time.time()
         NODE_POOL.add(node)
-        logger.info(f"Node added: {node.metadata.name}")
 
 
 def request_node_removal(qty: int = 1) -> dict | bool:
