@@ -141,32 +141,36 @@ def on_pod_deleted(pod: object) -> None:
 def update_pods_lists():
     logger.info("Updating pods lists.")
     global UNSCHEDULED_GPU_PODS, GPU_PODS
+
     pods = v1.list_pod_for_all_namespaces(_request_timeout=60, watch=False).items
 
-    # First pass: remove terminated pods from tracking
-    for pod in GPU_PODS.to_list():
-        if pod.status.phase in ("Succeeded", "Failed"):
-            if pod in UNSCHEDULED_GPU_PODS:
-                UNSCHEDULED_GPU_PODS.remove(pod)
-            GPU_PODS.remove(pod)
-            logger.info(f"Removing terminated pod from tracking: {pod.metadata.name}")
+    # Rebuild sets from scratch using current API data
+    new_gpu_pods = AsyncSet()
+    new_unscheduled_gpu_pods = AsyncSet()
 
-    # Second pass: add/update active GPU pods
     for pod in pods:
         # Skip terminated pods (Succeeded or Failed)
         if pod.status.phase in ("Succeeded", "Failed"):
+            logger.debug(f"Skipping terminated pod: {pod.metadata.name} (phase: {pod.status.phase})")
             continue
 
         total_gpus = pod_gpu_count(pod)
         if total_gpus > 0:
-            GPU_PODS.add(pod)
-            logger.info(f"Pod added: {pod.metadata.name} in namespace {pod.metadata.namespace}")
+            new_gpu_pods.add(pod)
+            logger.debug(f"Active GPU pod: {pod.metadata.name} in namespace {pod.metadata.namespace}")
             node_name = getattr(pod.spec, 'node_name', None)
-            if not node_name and pod not in UNSCHEDULED_GPU_PODS:
-                UNSCHEDULED_GPU_PODS.add(pod)
-            elif node_name and pod in UNSCHEDULED_GPU_PODS:
-                UNSCHEDULED_GPU_PODS.remove(pod)
-    UNSCHEDULED_GPU_PODS = UNSCHEDULED_GPU_PODS - pods
+            if not node_name:
+                new_unscheduled_gpu_pods.add(pod)
+
+    # Log what changed
+    old_gpu_count = GPU_PODS.size()
+    new_gpu_count = new_gpu_pods.size()
+    if old_gpu_count != new_gpu_count:
+        logger.info(f"GPU pod count changed: {old_gpu_count} -> {new_gpu_count}")
+
+    # Replace the global sets with fresh data
+    GPU_PODS = new_gpu_pods
+    UNSCHEDULED_GPU_PODS = new_unscheduled_gpu_pods
 
 
 def add_node_to_pool(node: object, source="watch") -> None:
