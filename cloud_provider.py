@@ -10,7 +10,7 @@ class CloudProvider(ABC):
     PROJECT_ID = os.getenv("GCP_PROJECT")
     ZONE = os.getenv("GCP_ZONE", "us-west1-a")
     NAME_PREFIX = os.getenv("INSTANCE_NAME", "ts-node")
-    TEMPLATE_NAME = os.getenv("INSTANCE_TEMPLATE")
+    GCP_INSTANCE_TEMPLATE = os.getenv("GCP_INSTANCE_TEMPLATE")
     STARTUP_SCRIPT = os.getenv("STARTUP_SCRIPT", "echo Startup Script was not provided.")
 
     if not PROJECT_ID or not TEMPLATE_NAME:
