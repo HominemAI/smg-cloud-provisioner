@@ -41,6 +41,35 @@ def get_current_gpu_pod_count() -> int:
     return GPU_PODS.size()
 
 
+def get_node_details() -> List[dict]:
+    node_details = []
+    current_time = time.time()
+    for node in NODE_POOL.to_list():
+        creation_timestamp = node.metadata.creation_timestamp
+        age_seconds = current_time - creation_timestamp.timestamp()
+
+        # Determine if node is ready
+        ready = False
+        if node.status and node.status.conditions:
+            for condition in node.status.conditions:
+                if condition.type == "Ready":
+                    ready = condition.status == "True"
+                    break
+
+        node_details.append({
+            "name": node.metadata.name,
+            "provider": node.metadata.labels.get(INSTANCE_PROVIDER_LABEL),
+            "instance_identifier": node.metadata.labels.get(INSTANCE_IDENTIFIER_LABEL),
+            "role": node.metadata.labels.get(NODE_ROLE_LABEL),
+            "creation_timestamp": creation_timestamp,
+            "age_seconds": age_seconds,
+            "ready": ready,
+            "labels": node.metadata.labels
+        })
+
+    return node_details
+
+
 def get_all_active_pods() -> List:
     pods = v1.list_pod_for_all_namespaces(
         field_selector="metadata.namespace!=kube-system,metadata.namespace!=kube-public",
@@ -178,6 +207,7 @@ def request_node_removal(qty: int = 1) -> dict | bool:
         if node_pods:
             continue
         remove_node_from_pool(node)
+        deregister_k8s_node(node.metadata.labels.get(INSTANCE_IDENTIFIER_LABEL))
         logger.info(
             f"Node removed: {node.metadata.name} - {node.metadata.labels.get(INSTANCE_PROVIDER_LABEL)} = {node.metadata.labels.get(INSTANCE_IDENTIFIER_LABEL)}")
         return {
