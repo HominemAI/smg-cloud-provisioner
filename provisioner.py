@@ -16,7 +16,7 @@ MIN_NODES = os.environ.get("SCALER_MIN_NODES", "0")
 SCALER_PROVISIONING_TIMEOUT = int(os.environ.get("SCALER_PROVISIONING_TIMEOUT", "300"))
 
 # How long to wait before dropping a node after excess pressure is detected
-SCALER_DROP_DELAY = os.environ.get("SCALER_DROP_DELAY", "300")
+SCALER_DROP_DELAY = int(os.environ.get("SCALER_DROP_DELAY", "900"))
 
 # How long to wait before removing an unready node (in seconds)
 UNREADY_NODE_TIMEOUT = int(os.environ.get("UNREADY_NODE_TIMEOUT", "600"))
@@ -30,6 +30,7 @@ PROVIDERS = {
 }
 
 PROVISIONING_TIME = time.time()
+EXCESS_CAPACITY_DETECTED_TIME = None
 
 
 def get_provider() -> GCEProvider:
@@ -104,9 +105,13 @@ def notify_deletion_callback(success: bool, instance_name: str, error: Exception
 
 def auto_scale():
     logger.info("Checking auto-scaling conditions...")
-    global IS_PROVISIONING, IS_DEPROVISIONING, PROVISIONING_TIME, SCALER_PROVISIONING_TIMEOUT
+    global IS_PROVISIONING, IS_DEPROVISIONING, PROVISIONING_TIME, SCALER_PROVISIONING_TIMEOUT, EXCESS_CAPACITY_DETECTED_TIME
+
     if k8s.get_current_node_count() < len(k8s.GPU_PODS):
+        # Pressure detected - need more nodes
         logger.info("Pressure detected: More GPU pods than nodes.")
+        EXCESS_CAPACITY_DETECTED_TIME = None  # Reset the excess capacity timer
+
         if not IS_PROVISIONING:
             logger.info("No provisioning in progress, starting new instance creation.")
             IS_PROVISIONING = True
@@ -121,16 +126,40 @@ def auto_scale():
             elif time.time() - PROVISIONING_TIME > SCALER_PROVISIONING_TIMEOUT:
                 IS_PROVISIONING = False
                 raise RuntimeError("Provisioning timeout exceeded")
+
     elif k8s.get_current_node_count() > len(k8s.GPU_PODS):
-        IS_DEPROVISIONING = True
-        response = k8s.request_node_removal(1)
-        if response:
-            PROVIDERS[response["provider"]].delete_instance(instance_identifier=response["identifier"],
-                                                            callback=notify_deletion_callback)
-        IS_DEPROVISIONING = False
+        # Excess capacity detected - more nodes than pods
+        logger.info("Excess capacity detected: More nodes than GPU pods.")
+
+        # Track when we first detected excess capacity
+        if EXCESS_CAPACITY_DETECTED_TIME is None:
+            EXCESS_CAPACITY_DETECTED_TIME = time.time()
+            logger.info(f"Starting {SCALER_DROP_DELAY}s delay before node removal")
+            return  # Exit and wait for next check
+
+        # Check if enough time has passed since excess capacity was detected
+        time_in_excess = time.time() - EXCESS_CAPACITY_DETECTED_TIME
+        if time_in_excess >= SCALER_DROP_DELAY:
+            logger.info(f"Excess capacity delay expired ({time_in_excess:.0f}s >= {SCALER_DROP_DELAY}s), removing node")
+            IS_DEPROVISIONING = True
+            response = k8s.request_node_removal(1)
+            if response:
+                PROVIDERS[response["provider"]].delete_instance(
+                    instance_identifier=response["identifier"],
+                    callback=notify_deletion_callback
+                )
+                # Reset the timer after successful removal request
+                EXCESS_CAPACITY_DETECTED_TIME = None
+            IS_DEPROVISIONING = False
+        else:
+            remaining = SCALER_DROP_DELAY - time_in_excess
+            logger.info(f"Excess capacity detected, waiting {remaining:.0f}s before node removal")
+
     else:
+        # Balanced - nodes == pods
         IS_PROVISIONING = False
         IS_DEPROVISIONING = False
+        EXCESS_CAPACITY_DETECTED_TIME = None  # Reset the excess capacity timer
 
 
 def start_auto_scaler():
