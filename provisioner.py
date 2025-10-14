@@ -3,7 +3,6 @@ import os
 import time
 
 import k8s
-import gce
 from gce import GCEProvider
 
 logger = logging.getLogger(__name__)

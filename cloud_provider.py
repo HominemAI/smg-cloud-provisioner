@@ -7,18 +7,12 @@ logger = logging.getLogger(__name__)
 
 
 class CloudProvider(ABC):
-    PROJECT_ID = os.getenv("GCP_PROJECT")
-    ZONE = os.getenv("GCP_ZONE", "us-west1-a")
-    NAME_PREFIX = os.getenv("INSTANCE_NAME", "ts-node")
-    GCP_INSTANCE_TEMPLATE = os.getenv("GCP_INSTANCE_TEMPLATE")
-    STARTUP_SCRIPT = os.getenv("STARTUP_SCRIPT", "echo Startup Script was not provided.")
-
-    if not PROJECT_ID or not GCP_INSTANCE_TEMPLATE:
-        raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
+    STARTUP_SCRIPT = os.getenv("STARTUP_SCRIPT", None)
+    NAME_PREFIX = os.getenv("INSTANCE_NAME", "smgcp")
 
     def __init__(self):
-        if not self.PROJECT_ID or not self.GCP_INSTANCE_TEMPLATE:
-            raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
+        if not self.STARTUP_SCRIPT or not self.NAME_PREFIX:
+            raise ValueError("Startup Script and Instance Name Prefix must be set")
 
     @abstractmethod
     def create_instance(self, callback=None) -> str:
@@ -35,7 +29,6 @@ class CloudProvider(ABC):
     @abstractmethod
     def get_instance(self, instance_identifier: str) -> str:
         pass
-
 
     # /\/\/\/\/\/ Startup Script Handling /\/\/\/\/\/\
     @staticmethod

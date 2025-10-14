@@ -9,11 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 class GCEProvider(CloudProvider):
-    PROJECT_ID = os.getenv("GCP_PROJECT", None)
-    ZONE = os.getenv("GCP_ZONE", None)
-    NAME_PREFIX = os.getenv("INSTANCE_NAME", "smgcp")
-    GCP_INSTANCE_TEMPLATE = os.getenv("GCP_INSTANCE_TEMPLATE", None)
-    STARTUP_SCRIPT = os.getenv("STARTUP_SCRIPT", "echo Startup Script was not provided.")
+    GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", None)
+    GCP_ZONE = os.getenv("GCP_ZONE", None)
+    GCP_INSTANCE_TEMPLATE_NAME = os.getenv("GCP_INSTANCE_TEMPLATE_NAME", None)
 
     def __init__(self):
         super().__init__()
@@ -39,7 +37,7 @@ class GCEProvider(CloudProvider):
 
         # Regional template path
         source_instance_template_url = (
-            f"projects/{self.PROJECT_ID}/regions/us-west1/instanceTemplates/{self.TEMPLATE_NAME}"
+            f"projects/{self.GCP_PROJECT_ID}/regions/us-west1/instanceTemplates/{self.GCP_INSTANCE_TEMPLATE_NAME}"
         )
 
         # Instance resource only needs the name (other props come from template)
@@ -60,8 +58,8 @@ class GCEProvider(CloudProvider):
         client = compute_v1.InstancesClient()
 
         request = compute_v1.InsertInstanceRequest(
-            project=self.PROJECT_ID,
-            zone=self.ZONE,
+            project=self.GCP_PROJECT_ID,
+            zone=self.GCP_ZONE,
             instance_resource=instance_resource,
             source_instance_template=source_instance_template_url,
         )
@@ -75,8 +73,8 @@ class GCEProvider(CloudProvider):
     def delete_instance(self, instance_identifier: str, callback=None) -> bool:
         client = compute_v1.InstancesClient()
         request = compute_v1.DeleteInstanceRequest(
-            project=self.PROJECT_ID,
-            zone=self.ZONE,
+            project=self.GCP_PROJECT_ID,
+            zone=self.GCP_ZONE,
             instance=instance_identifier,
         )
         deletion_thread = threading.Thread(target=GCEProvider.operation_delete_instance_submission,
@@ -86,12 +84,12 @@ class GCEProvider(CloudProvider):
 
     def list_instances(self) -> list:
         client = compute_v1.InstancesClient()
-        request = compute_v1.ListInstancesRequest(project=self.PROJECT_ID, zone=self.ZONE)
+        request = compute_v1.ListInstancesRequest(project=self.GCP_PROJECT_ID, zone=self.GCP_ZONE)
         instances = client.list(request=request)
         return [instance.name for instance in instances]
 
     def get_instance(self, instance_identifier: str) -> str:
         client = compute_v1.InstancesClient()
-        request = compute_v1.GetInstanceRequest(project=self.PROJECT_ID, zone=self.ZONE, instance=instance_identifier)
+        request = compute_v1.GetInstanceRequest(project=self.GCP_PROJECT_ID, zone=self.GCP_ZONE, instance=instance_identifier)
         instance = client.get(request=request)
         return instance.name if instance else None

@@ -2,7 +2,6 @@
 import asyncio
 import logging
 import os
-import signal
 import threading
 import time
 from typing import List
