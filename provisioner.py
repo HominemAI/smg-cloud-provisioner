@@ -1,4 +1,4 @@
-# AI Disclosure: AI was used to flesh out call back logging
+# AI Disclosure: AI was used to flesh out call back logging and the unready node removal logic.
 import logging
 import os
 import time
@@ -37,10 +37,6 @@ def get_provider() -> GCEProvider:
 
 
 def check_and_remove_unready_nodes():
-    """
-    Check all nodes managed by this provisioner and remove any that have been unready for longer than UNREADY_NODE_TIMEOUT.
-    This checks all nodes with the instance identifier label, not just those in NODE_POOL.
-    """
     logger.info("Checking for unready nodes...")
 
     # Get all nodes with our instance identifier label (not just those in NODE_POOL)
@@ -63,12 +59,14 @@ def check_and_remove_unready_nodes():
             age_seconds = current_time - creation_timestamp.timestamp()
             instance_identifier = node.metadata.labels.get(k8s.INSTANCE_IDENTIFIER_LABEL)
 
-            logger.warning(f"Unready node detected: {node.metadata.name} (age: {age_seconds:.0f}s, ready status: {ready_status})")
+            logger.warning(
+                f"Unready node detected: {node.metadata.name} (age: {age_seconds:.0f}s, ready status: {ready_status})")
 
             # Only remove if the node has been unready for longer than the timeout
             if age_seconds > UNREADY_NODE_TIMEOUT:
                 if instance_identifier:
-                    logger.info(f"Removing unready node (exceeded timeout of {UNREADY_NODE_TIMEOUT}s): {node.metadata.name} - {instance_identifier}")
+                    logger.info(
+                        f"Removing unready node (exceeded timeout of {UNREADY_NODE_TIMEOUT}s): {node.metadata.name} - {instance_identifier}")
                     k8s.deregister_k8s_node(instance_identifier)
 
                     # Delete the instance from the cloud provider
@@ -82,7 +80,8 @@ def check_and_remove_unready_nodes():
                     logger.warning(f"Node {node.metadata.name} missing instance identifier, skipping cloud deletion")
             else:
                 remaining = UNREADY_NODE_TIMEOUT - age_seconds
-                logger.info(f"Node {node.metadata.name} is unready but within timeout window ({remaining:.0f}s remaining)")
+                logger.info(
+                    f"Node {node.metadata.name} is unready but within timeout window ({remaining:.0f}s remaining)")
 
 
 def notify_creation_callback(success: bool, instance_name: str, error: Exception):
@@ -93,6 +92,7 @@ def notify_creation_callback(success: bool, instance_name: str, error: Exception
         logger.error(f"Instance {instance_name} creation failed: {error}")
         IS_PROVISIONING = False
 
+
 def notify_deletion_callback(success: bool, instance_name: str, error: Exception):
     global IS_DEPROVISIONING
     if success:
@@ -100,6 +100,7 @@ def notify_deletion_callback(success: bool, instance_name: str, error: Exception
     else:
         logger.error(f"Instance {instance_name} deletion failed: {error}")
     IS_DEPROVISIONING = False
+
 
 def auto_scale():
     logger.info("Checking auto-scaling conditions...")
@@ -124,11 +125,13 @@ def auto_scale():
         IS_DEPROVISIONING = True
         response = k8s.request_node_removal(1)
         if response:
-            PROVIDERS[response["provider"]].delete_instance(instance_identifier=response["identifier"], callback=notify_deletion_callback)
+            PROVIDERS[response["provider"]].delete_instance(instance_identifier=response["identifier"],
+                                                            callback=notify_deletion_callback)
         IS_DEPROVISIONING = False
     else:
         IS_PROVISIONING = False
         IS_DEPROVISIONING = False
+
 
 def start_auto_scaler():
     global SCALER_INTERVAL
