@@ -22,7 +22,7 @@ IS_PROVISIONING = False
 IS_DEPROVISIONING = False
 
 PROVIDERS = {
-    "gce": GCEProvider()
+    "gce": GCEProvider(provider_name="gce")
 }
 
 PROVISIONING_TIME = time.time()
@@ -59,7 +59,7 @@ def auto_scale():
         IS_DEPROVISIONING = True
         response = k8s.request_node_removal(1)
         if response:
-            get_provider().delete_instance(response["instance_identifier"])
+            PROVIDERS[response["provider"]].delete_instance(response["identifier"])
         IS_DEPROVISIONING = False
     else:
         IS_PROVISIONING = False

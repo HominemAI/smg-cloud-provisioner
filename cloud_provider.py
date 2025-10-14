@@ -8,10 +8,13 @@ logger = logging.getLogger(__name__)
 
 class CloudProvider(ABC):
     NAME_PREFIX = os.getenv("INSTANCE_NAME", "smgcp")
+    PROVIDER_NAME: str
 
-    def __init__(self):
+    def __init__(self, provider_name: str | None = None):
         if not self.NAME_PREFIX:
             raise ValueError("Instance Name Prefix must be set")
+        if provider_name:
+            self.PROVIDER_NAME = provider_name
 
     @abstractmethod
     def create_instance(self, callback=None) -> str:

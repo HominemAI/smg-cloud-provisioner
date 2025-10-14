@@ -9,13 +9,14 @@ logger = logging.getLogger(__name__)
 
 
 class GCEProvider(CloudProvider):
+    PROVIDER_NAME = "gce"
     GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", None)
     GCP_ZONE = os.getenv("GCP_ZONE", None)
     GCP_INSTANCE_TEMPLATE_NAME = os.getenv("GCP_INSTANCE_TEMPLATE_NAME", None)
     GCP_STARTUP_SCRIPT = os.getenv("GCP_STARTUP_SCRIPT", None)
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     @staticmethod
     def operation_create_instance_submission(client, request, callback):
@@ -50,7 +51,7 @@ class GCEProvider(CloudProvider):
                 self.GCP_STARTUP_SCRIPT,
                 {
                     "INSTANCE_NAME": instance_name,
-                    "INSTANCE_PROVIDER": "gce"
+                    "INSTANCE_PROVIDER": self.PROVIDER_NAME
                 }
             )
             metadata = compute_v1.Metadata()
