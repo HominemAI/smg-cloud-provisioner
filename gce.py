@@ -12,6 +12,7 @@ class GCEProvider(CloudProvider):
     GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", None)
     GCP_ZONE = os.getenv("GCP_ZONE", None)
     GCP_INSTANCE_TEMPLATE_NAME = os.getenv("GCP_INSTANCE_TEMPLATE_NAME", None)
+    GCP_STARTUP_SCRIPT = os.getenv("GCP_STARTUP_SCRIPT", None)
 
     def __init__(self):
         super().__init__()
@@ -44,9 +45,9 @@ class GCEProvider(CloudProvider):
         instance_resource = compute_v1.Instance(name=instance_name)
 
         # Inject startup script (replace placeholder with auth key)
-        if self.STARTUP_SCRIPT:
+        if self.GCP_STARTUP_SCRIPT:
             startup_script = CloudProvider.substitute_startup_script_vars(
-                self.STARTUP_SCRIPT,
+                self.GCP_STARTUP_SCRIPT,
                 {
                     "INSTANCE_NAME": instance_name,
                     "INSTANCE_PROVIDER": "gce"
