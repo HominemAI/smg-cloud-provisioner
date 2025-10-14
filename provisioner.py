@@ -37,9 +37,6 @@ def get_provider() -> GCEProvider:
 
 
 def check_and_remove_unready_nodes():
-    """
-    Check all registered nodes and remove any that have been unready for longer than UNREADY_NODE_TIMEOUT.
-    """
     logger.info("Checking for unready nodes...")
     node_details = k8s.get_node_details()
 
@@ -120,6 +117,7 @@ def start_auto_scaler():
     while True:
         try:
             k8s.update_nodes_list()
+            check_and_remove_unready_nodes()
             k8s.update_pods_lists()
             auto_scale()
         except Exception as e:
