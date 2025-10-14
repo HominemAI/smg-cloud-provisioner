@@ -1,3 +1,4 @@
+# AI Disclosure: AI was used to flesh out call back logging
 import logging
 import os
 import time
@@ -32,9 +33,21 @@ def get_provider() -> GCEProvider:
     return PROVIDERS["gce"]
 
 
-def notify_creation_callback(instance_name: str):
-    logger.info("Notifying creation callback")
+def notify_creation_callback(success: bool, instance_name: str, error: Exception):
+    global IS_PROVISIONING
+    if success:
+        logger.info(f"Instance {instance_name} created successfully")
+    else:
+        logger.error(f"Instance {instance_name} creation failed: {error}")
+        IS_PROVISIONING = False
 
+def notify_deletion_callback(success: bool, instance_name: str, error: Exception):
+    global IS_DEPROVISIONING
+    if success:
+        logger.info(f"Instance {instance_name} deleted successfully")
+    else:
+        logger.error(f"Instance {instance_name} deletion failed: {error}")
+    IS_DEPROVISIONING = False
 
 def auto_scale():
     logger.info("Checking auto-scaling conditions...")
@@ -59,7 +72,7 @@ def auto_scale():
         IS_DEPROVISIONING = True
         response = k8s.request_node_removal(1)
         if response:
-            PROVIDERS[response["provider"]].delete_instance(response["identifier"])
+            PROVIDERS[response["provider"]].delete_instance(instance_identifier=response["identifier"], callback=notify_deletion_callback)
         IS_DEPROVISIONING = False
     else:
         IS_PROVISIONING = False

@@ -1,8 +1,10 @@
+# AI Disclosure: AI was used to flesh out common error handling.
 import logging
 import os
 import threading
 import uuid
 from google.cloud import compute_v1
+from google.api_core import exceptions as gcp_exceptions
 from cloud_provider import CloudProvider
 
 logger = logging.getLogger(__name__)
@@ -20,17 +22,51 @@ class GCEProvider(CloudProvider):
 
     @staticmethod
     def operation_create_instance_submission(client, request, callback):
-        operation = client.insert(request=request)
-        operation.result()
-        if callback:
-            callback(request.instance_resource.name)
+        try:
+            operation = client.insert(request=request)
+            operation.result()
+            if callback:
+                callback(success=True, instance_name=request.instance_resource.name, error=None)
+        except gcp_exceptions.ResourceExhausted as e:
+            logger.error(f"Quota exceeded creating instance {request.instance_resource.name}: {e}")
+            if callback:
+                callback(success=False, instance_name=request.instance_resource.name, error=e)
+        except gcp_exceptions.PermissionDenied as e:
+            logger.error(f"Permission denied creating instance {request.instance_resource.name}: {e}")
+            if callback:
+                callback(success=False, instance_name=request.instance_resource.name, error=e)
+        except gcp_exceptions.DeadlineExceeded as e:
+            logger.error(f"Timeout creating instance {request.instance_resource.name}: {e}")
+            if callback:
+                callback(success=False, instance_name=request.instance_resource.name, error=e)
+        except Exception as e:
+            logger.error(f"Failed to create instance {request.instance_resource.name}: {e}")
+            if callback:
+                callback(success=False, instance_name=request.instance_resource.name, error=e)
 
     @staticmethod
     def operation_delete_instance_submission(client, request, callback):
-        operation = client.delete(request=request)
-        operation.result()
-        if callback:
-            callback(request.instance)
+        try:
+            operation = client.delete(request=request)
+            operation.result()
+            if callback:
+                callback(success=True, instance_name=request.instance, error=None)
+        except gcp_exceptions.NotFound as e:
+            logger.warning(f"Instance {request.instance} not found, may have already been deleted")
+            if callback:
+                callback(success=True, instance_name=request.instance, error=None)  # Still success
+        except gcp_exceptions.PermissionDenied as e:
+            logger.error(f"Permission denied deleting instance {request.instance}: {e}")
+            if callback:
+                callback(success=False, instance_name=request.instance, error=e)
+        except gcp_exceptions.DeadlineExceeded as e:
+            logger.error(f"Timeout deleting instance {request.instance}: {e}")
+            if callback:
+                callback(success=False, instance_name=request.instance, error=e)
+        except Exception as e:
+            logger.error(f"Failed to delete instance {request.instance}: {e}")
+            if callback:
+                callback(success=False, instance_name=request.instance, error=e)
 
     def create_instance(self, callback=None) -> str:
         unique_suffix = str(uuid.uuid4())[:8]
