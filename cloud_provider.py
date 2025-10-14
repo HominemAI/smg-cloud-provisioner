@@ -13,11 +13,11 @@ class CloudProvider(ABC):
     GCP_INSTANCE_TEMPLATE = os.getenv("GCP_INSTANCE_TEMPLATE")
     STARTUP_SCRIPT = os.getenv("STARTUP_SCRIPT", "echo Startup Script was not provided.")
 
-    if not PROJECT_ID or not TEMPLATE_NAME:
+    if not PROJECT_ID or not GCP_INSTANCE_TEMPLATE:
         raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
 
     def __init__(self):
-        if not self.PROJECT_ID or not self.TEMPLATE_NAME:
+        if not self.PROJECT_ID or not self.GCP_INSTANCE_TEMPLATE:
             raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
 
     @abstractmethod
