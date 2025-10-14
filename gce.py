@@ -4,14 +4,15 @@ import threading
 import uuid
 from google.cloud import compute_v1
 from cloud_provider import CloudProvider
+
 logger = logging.getLogger(__name__)
 
 
 class GCEProvider(CloudProvider):
-    PROJECT_ID = os.getenv("GCP_PROJECT")
-    ZONE = os.getenv("GCP_ZONE", "us-west1-a")
-    NAME_PREFIX = os.getenv("INSTANCE_NAME", "ts-node")
-    TEMPLATE_NAME = os.getenv("INSTANCE_TEMPLATE")
+    PROJECT_ID = os.getenv("GCP_PROJECT", None)
+    ZONE = os.getenv("GCP_ZONE", None)
+    NAME_PREFIX = os.getenv("INSTANCE_NAME", "smgcp")
+    GCP_INSTANCE_TEMPLATE = os.getenv("GCP_INSTANCE_TEMPLATE", None)
     STARTUP_SCRIPT = os.getenv("STARTUP_SCRIPT", "echo Startup Script was not provided.")
 
     def __init__(self):

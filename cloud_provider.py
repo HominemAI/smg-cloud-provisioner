@@ -2,8 +2,6 @@ from abc import ABC, abstractmethod
 import logging
 import os
 import re
-import threading
-import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +19,6 @@ class CloudProvider(ABC):
     def __init__(self):
         if not self.PROJECT_ID or not self.TEMPLATE_NAME:
             raise ValueError("GCP_PROJECT and INSTANCE_TEMPLATE must be set")
-
-    def validate_required_env(self, **env_vars):
-        missing = [name for name, value in env_vars.items() if not value]
-        if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
-        return True
 
     @abstractmethod
     def create_instance(self, callback=None) -> str:

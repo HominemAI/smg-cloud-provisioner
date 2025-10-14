@@ -4,6 +4,7 @@ import time
 
 import k8s
 import gce
+from gce import GCEProvider
 
 logger = logging.getLogger(__name__)
 logger.info("Starting Kubernetes Provisioner")
@@ -21,7 +22,16 @@ SCALER_DROP_DELAY = os.environ.get("SCALER_DROP_DELAY", "300")
 IS_PROVISIONING = False
 IS_DEPROVISIONING = False
 
+PROVIDERS = {
+    "gce": GCEProvider()
+}
+
 PROVISIONING_TIME = time.time()
+
+
+def get_provider() -> GCEProvider:
+    return PROVIDERS["gce"]
+
 
 def notify_creation_callback(instance_name: str):
     logger.info("Notifying creation callback")
@@ -35,7 +45,7 @@ def auto_scale():
         if not IS_PROVISIONING:
             logger.info("No provisioning in progress, starting new instance creation.")
             IS_PROVISIONING = True
-            instance_name = gce.create_instance_from_template(callback=notify_creation_callback)
+            instance_name = get_provider().create_instance(callback=notify_creation_callback)
             logger.info(f"Instance creation triggered: {instance_name} startup and registration in progress...")
         else:
             logger.info(f"Last node time: {k8s.get_latest_node_time()} vs {PROVISIONING_TIME}")
@@ -50,11 +60,12 @@ def auto_scale():
         IS_DEPROVISIONING = True
         response = k8s.request_node_removal(1)
         if response:
-            gce.shutdown_instance(response["instance_identifier"])
+            get_provider().delete_instance(response["instance_identifier"])
         IS_DEPROVISIONING = False
     else:
         IS_PROVISIONING = False
         IS_DEPROVISIONING = False
+
 
 def start_auto_scaler():
     global SCALER_INTERVAL
