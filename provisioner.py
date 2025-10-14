@@ -37,33 +37,52 @@ def get_provider() -> GCEProvider:
 
 
 def check_and_remove_unready_nodes():
+    """
+    Check all nodes managed by this provisioner and remove any that have been unready for longer than UNREADY_NODE_TIMEOUT.
+    This checks all nodes with the instance identifier label, not just those in NODE_POOL.
+    """
     logger.info("Checking for unready nodes...")
-    node_details = k8s.get_node_details()
 
-    for node in node_details:
-        if not node["ready"]:
-            age_seconds = node["age_seconds"]
-            logger.warning(f"Unready node detected: {node['name']} (age: {age_seconds:.0f}s)")
+    # Get all nodes with our instance identifier label (not just those in NODE_POOL)
+    all_nodes = k8s.v1.list_node(label_selector=f"{k8s.INSTANCE_IDENTIFIER_LABEL}")
+    current_time = time.time()
+
+    for node in all_nodes.items:
+        # Determine if node is ready
+        ready = False
+        ready_status = "Unknown"
+        if node.status and node.status.conditions:
+            for condition in node.status.conditions:
+                if condition.type == "Ready":
+                    ready = condition.status == "True"
+                    ready_status = condition.status
+                    break
+
+        if not ready:
+            creation_timestamp = node.metadata.creation_timestamp
+            age_seconds = current_time - creation_timestamp.timestamp()
+            instance_identifier = node.metadata.labels.get(k8s.INSTANCE_IDENTIFIER_LABEL)
+
+            logger.warning(f"Unready node detected: {node.metadata.name} (age: {age_seconds:.0f}s, ready status: {ready_status})")
 
             # Only remove if the node has been unready for longer than the timeout
             if age_seconds > UNREADY_NODE_TIMEOUT:
-                instance_identifier = node["instance_identifier"]
                 if instance_identifier:
-                    logger.info(f"Removing unready node (exceeded timeout of {UNREADY_NODE_TIMEOUT}s): {node['name']} - {instance_identifier}")
+                    logger.info(f"Removing unready node (exceeded timeout of {UNREADY_NODE_TIMEOUT}s): {node.metadata.name} - {instance_identifier}")
                     k8s.deregister_k8s_node(instance_identifier)
 
                     # Delete the instance from the cloud provider
-                    provider_name = node["provider"]
+                    provider_name = node.metadata.labels.get(k8s.INSTANCE_PROVIDER_LABEL)
                     if provider_name and provider_name in PROVIDERS:
                         PROVIDERS[provider_name].delete_instance(
                             instance_identifier=instance_identifier,
                             callback=notify_deletion_callback
                         )
                 else:
-                    logger.warning(f"Node {node['name']} missing instance identifier, skipping cloud deletion")
+                    logger.warning(f"Node {node.metadata.name} missing instance identifier, skipping cloud deletion")
             else:
                 remaining = UNREADY_NODE_TIMEOUT - age_seconds
-                logger.info(f"Node {node['name']} is unready but within timeout window ({remaining:.0f}s remaining)")
+                logger.info(f"Node {node.metadata.name} is unready but within timeout window ({remaining:.0f}s remaining)")
 
 
 def notify_creation_callback(success: bool, instance_name: str, error: Exception):
