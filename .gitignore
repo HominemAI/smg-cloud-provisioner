@@ -54,3 +54,24 @@ secrets.yaml
 # Ignore local dev only files
 .env.local
 .envrc
+
+# Local agent/editor state and working notes
+.agents/
+.claude/
+.impeccable/
+/CLAUDE.md
+/skills-lock.json
+/local-notes/
+
+# Local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+!.env.sample
+/kubeconfig
+/kubeconfig.*
+/credentials.json
+/service-account*.json
+# Local experiment and deployment output
+/artifacts/
+/runs/
