@@ -1,57 +1,44 @@
-
-
-
-
 # SMG Cloud Provisioner
 
-A cloud-agnostic Kubernetes node auto-scaler that dynamically provisions GPU instances based on workload demand. Built for hybrid cloud environments with secure networking integration.
+A Kubernetes GPU node provisioner for hybrid K3s and Google Compute Engine environments, published by HOMINEM. It polls workload demand, creates GCE instances from an existing template, and removes idle capacity after a delay. Tailscale credentials and a supplied startup script connect new instances to the cluster.
 
-## Architecture Overview
+## Components
 
-### Core Components
+| File | Responsibility |
+| --- | --- |
+| `provisioner.py` | Scaling loop, provisioning callbacks, and unready-node cleanup |
+| `k8s.py` | GPU pod discovery and Kubernetes node lifecycle |
+| `gce.py` | GCE instance creation and deletion |
+| `cloud_provider.py` | Provider interface and startup-script substitution |
+| `tailscale_provider.py` | Tailscale authentication support |
+| `main.py` | Process startup and scaler loop |
 
-**🏗️ Cloud Infrastructure Layer**
-- `gce.py` - Google Cloud Compute Engine instance management
-- `k8s.py` - Kubernetes cluster integration and node lifecycle management
-- `tailscale_provider.py` - Secure networking and VPN key management
+GCE is the only implemented cloud provider. The provider interface is an extension point, not multi-cloud support.
 
-**⚡ Orchestration Layer**
-- `provisioner.py` - Auto-scaling logic and resource management
-- `main.py` - FastAPI web server and system orchestration
-- `async_tools.py` - Asynchronous utilities and threading helpers
+## Configuration and execution
 
-### System Flow
+See [ENV.md](ENV.md) for environment variables. The process expects in-cluster Kubernetes credentials, Google Cloud credentials, an existing GCE instance template, and a startup script that joins the node to your cluster. Credentials and cluster-specific manifests belong outside Git.
 
-```
-1. 📊 Monitor K8s GPU pod pressure
-2. 🚀 Trigger instance provisioning when demand exceeds capacity
-3. 🔑 Generate fresh Tailscale auth keys for secure networking
-4. ☁️  Create GCE instances from templates with dynamic startup scripts
-5. 🔗 Join new nodes to K3s cluster automatically
-6. 📉 Scale down when demand decreases
+```sh
+docker build -t smg-cloud-provisioner .
 ```
 
-### Key Features
+Deploy the image with your own Kubernetes service account, RBAC, secret references, and environment configuration. Importing the application starts infrastructure clients; this is not a local dry-run command. No HTTP API is currently implemented.
 
-- **Cloud Agnostic Design** - Modular architecture supports multiple cloud providers
-- **Dynamic Configuration** - Startup scripts with automatic variable substitution (`__VAR_NAME__`)
-- **Secure Networking** - Integrated Tailscale mesh networking with auto-rotating keys
-- **Async Operations** - Non-blocking instance creation and deletion
-- **Environment-Driven** - 12-factor app compliance with comprehensive ENV configuration
-- **GPU-Aware Scaling** - Intelligent scaling based on GPU workload demand
+## Current limitations
 
-### Configuration
+- Scaling compares GPU pod count with node count, assuming one GPU workload per node; it does not perform GPU-capacity bin packing.
+- `SCALER_MIN_NODES` and `SCALER_MAX_NODES` are declared but not enforced by the current scaling loop.
+- Unready-node cleanup uses node age, not elapsed time since the Ready condition changed.
+- The GCE template region is currently fixed to `us-west1`.
+- Recovery, scale-down behavior, and provisioning latency need validation for each deployment. This release does not claim production hardening or published performance measurements.
 
-All configuration is environment-driven. See [ENV.md](ENV.md) for complete variable documentation.
-
----
-
-## AI Disclosure 
-AI was used to assist in the creation of this code. The model did not design the architecture 
-and is responsible for less than 5% of the code. All code was reviewed and tested by me. 
+## AI Disclosure
+AI was used to assist in the creation of this code. The model did not design the architecture
+and is responsible for less than 5% of the code. All code was reviewed and tested by me.
 
 - Assisted in writing less than 5% of the code including some helper functions.
 - Generating some of the docs and collecting env vars/cataloging them.
 - Reviewing code for potential bugs and improvements. Improvements were implemented by human.
 - A rubber duck to go over my ideas with and get feed back on my approach and understanding.
-- Generated most things above this Disclosure, I like writing docs, but I mean genAI is badass. 
+- Generated most things above this Disclosure, I like writing docs, but I mean genAI is badass.

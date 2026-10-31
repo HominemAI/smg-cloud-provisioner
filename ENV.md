@@ -15,8 +15,8 @@
 
 ## Scaling Configuration (provisioner.py)
 - `SCALER_TIME_DELAY` - Scaling check interval in seconds (default: "60")
-- `SCALER_MAX_NODES` - Maximum number of nodes (default: "2")
-- `SCALER_MIN_NODES` - Minimum number of nodes (default: "0")
+- `SCALER_MAX_NODES` - Declared maximum (default: "2"); not currently enforced
+- `SCALER_MIN_NODES` - Declared minimum (default: "0"); not currently enforced
 - `SCALER_PROVISIONING_TIMEOUT` - Instance provisioning timeout in seconds (default: "300")
 - `SCALER_DROP_DELAY` - Delay before dropping nodes in seconds (default: "300")
 
