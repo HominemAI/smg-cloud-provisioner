@@ -40,6 +40,25 @@ class EC2GpuTests(unittest.TestCase):
         self.assertNotIn('__GPU_EC2_ROLE__',pool.provider.startup_script)
         self.assertTrue(pool.dry_run)
 
+    def test_existing_gce_prefix_can_coexist_with_aws_child_prefix(self):
+        env = {'GPU_ENABLED':'true', 'GPU_EC2_ENABLED':'true',
+               'EMERGENCY_ENABLED':'false', 'INSTANCE_NAME':'smg-gpu',
+               'GCP_PROJECT_ID':'test', 'GCP_ZONE':'us-west1-a',
+               'GCP_INSTANCE_TEMPLATE_NAME':'gpu',
+               'GPU_EC2_LAUNCH_TEMPLATE':'lt-gpu', 'AWS_REGION':'us-west-2',
+               'AWS_SUBNET_IDS':'subnet-a', 'GPU_EC2_INSTANCE_NAME':'smg-gpu-aws'}
+        with patch.dict(os.environ,env,clear=True), patch('ec2.boto3.client'):
+            pools = build_pools()
+            self.assertEqual([p.provider.NAME_PREFIX for p in pools],
+                             ['smg-gpu','smg-gpu-aws'])
+            # The ordered emergency provider must still reject GCE overlap.
+            os.environ.update(EMERGENCY_ENABLED='true', EMERGENCY_PROVIDERS='gce',
+                              EMERGENCY_INSTANCE_NAME='smg-gpu',
+                              EMERGENCY_STARTUP_SCRIPT='script',
+                              EMERGENCY_GCP_INSTANCE_TEMPLATE_NAME='cpu')
+            with self.assertRaisesRegex(ValueError, 'overlap within a provider'):
+                build_pools()
+
     def test_rendered_bootstrap_fits_userdata_and_bash(self):
         required,_=CloudProvider.parse_startup_script(SCRIPT)
         env={key:'placeholder' for key in required}

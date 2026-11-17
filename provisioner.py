@@ -263,9 +263,16 @@ def build_pools():
                 or min(pool.trigger_delay, pool.recovery_delay, pool.provisioning_timeout, pool.unready_timeout) < 0):
             raise ValueError(f'Invalid limits or delays for {pool.name}')
     for left, right in combinations(pools, 2):
-        a, b = left.provider.NAME_PREFIX, right.provider.NAME_PREFIX
-        if a == b or a.startswith(b + '-') or b.startswith(a + '-'):
-            raise ValueError('Pool instance prefixes must not overlap')
+        # Inventory is scoped to a cloud provider. Nested prefixes in different
+        # clouds cannot capture each other's instances; check concrete children
+        # of ordered providers so same-cloud overlap still fails closed.
+        for a in getattr(left.provider, 'providers', [left.provider]):
+            for b in getattr(right.provider, 'providers', [right.provider]):
+                same_name = a.NAME_PREFIX == b.NAME_PREFIX
+                overlap = (a.NAME_PREFIX.startswith(b.NAME_PREFIX + '-')
+                           or b.NAME_PREFIX.startswith(a.NAME_PREFIX + '-'))
+                if same_name or (a.PROVIDER_NAME == b.PROVIDER_NAME and overlap):
+                    raise ValueError('Pool instance prefixes must not overlap within a provider')
         if left.role == right.role:
             raise ValueError('Pool role labels must differ')
     return pools
