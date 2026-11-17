@@ -75,3 +75,6 @@ secrets.yaml
 # Local experiment and deployment output
 /artifacts/
 /runs/
+
+/deployment/
+/PLAN.md

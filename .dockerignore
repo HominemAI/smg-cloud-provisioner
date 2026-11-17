@@ -20,3 +20,8 @@ kubeconfig*
 local-notes
 artifacts
 runs
+
+deployment
+PLAN.md
+.aws
+.codex

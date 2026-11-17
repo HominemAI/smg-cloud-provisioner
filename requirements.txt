@@ -5,3 +5,4 @@ kubernetes==33.1.0
 google-cloud-compute
 protobuf~=6.32.0
 urllib3~=2.5.0
+boto3>=1.44.4,<2

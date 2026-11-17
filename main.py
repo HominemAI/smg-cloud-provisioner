@@ -1,48 +1,28 @@
 import logging
 import signal
 import sys
-import os
 import threading
-# Configure logging first, before importing other modules
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)],
-    force=True
-)
 
-# Set root logger level to ensure all modules log
-logging.getLogger().setLevel(logging.INFO)
 
-logger = logging.getLogger(__name__)
-logger.info("Logging configured")
-
-# /\/\/\/\/\/\/\ IMPORT & START SERVICES\/\/\/\/\/\/\/\/\/\
-try:
-    logger.info("Activating K8s interface")
+def main():
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        handlers=[logging.StreamHandler(sys.stdout)], force=True)
     import k8s
-
-    logger.info("Activating tailscale provider")
-    import tailscale_provider
-    tailscale_provider.start()
-
-    logger.info("Activating GCE")
-    import gce
-
-    logger.info("Activating provisioner")
     import provisioner
-    provisioner.start_auto_scaler()
 
-    logger.info("Modules imported successfully")
-except ImportError as e:
-    logger.error(f"Module import failed: {e}")
-    sys.exit(1)
+    pools = provisioner.build_pools()
+    if not pools:
+        raise ValueError('At least one pool must be enabled')
+    k8s.initialize()
+    if not all(pool.dry_run for pool in pools):
+        import tailscale_provider
+        tailscale_provider.start()
+    shutdown = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: shutdown.set())
+    signal.signal(signal.SIGINT, lambda *_: shutdown.set())
+    provisioner.start_auto_scaler(pools, shutdown)
 
 
-# Wait for SIGTERM to gracefully shutdown
-shutdown_event = threading.Event()
-signal.signal(signal.SIGTERM, lambda s, f: shutdown_event.set())
-
-logger.info("Waiting for termination signal...")
-shutdown_event.wait()
-logger.info("Received SIGTERM, shutting down")
+if __name__ == '__main__':
+    main()
