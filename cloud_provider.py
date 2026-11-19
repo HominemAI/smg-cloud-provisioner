@@ -10,7 +10,9 @@ class CloudProvider(ABC):
     NAME_PREFIX = os.getenv("INSTANCE_NAME", "smgcp")
     PROVIDER_NAME: str
 
-    def __init__(self, provider_name: str | None = None):
+    def __init__(self, provider_name: str | None = None, name_prefix=None, startup_script=None):
+        self.NAME_PREFIX = name_prefix if name_prefix is not None else os.getenv("INSTANCE_NAME", "smgcp")
+        self.startup_script = startup_script
         if not self.NAME_PREFIX:
             raise ValueError("Instance Name Prefix must be set")
         if provider_name:
@@ -21,7 +23,7 @@ class CloudProvider(ABC):
         pass
 
     @abstractmethod
-    def delete_instance(self, instance_identifier: str) -> bool:
+    def delete_instance(self, instance_identifier: str, callback=None) -> bool:
         pass
 
     @abstractmethod
@@ -43,7 +45,7 @@ class CloudProvider(ABC):
 
     @staticmethod
     def ensure_startup_required_substitutions(env_vars: list[str]) -> bool:
-        missing = [var for var in env_vars if var not in os.environ]
+        missing = [var for var in env_vars if not os.environ.get(var)]
         if missing:
             raise ValueError(f"Missing required environment variables for startup script: {', '.join(missing)}")
         return True
@@ -63,10 +65,15 @@ class CloudProvider(ABC):
         logger.info(f"Looking for following Env Variables: {str(env_vars)}")
 
         if CloudProvider.ensure_startup_required_substitutions(env_vars):
+            # PATs contain only letters, digits and underscores. Reject shell/YAML
+            # metacharacters rather than placing malformed input in user data.
+            if "GHCR_PAT" in env_vars and not re.fullmatch(r"[A-Za-z0-9_]+", os.environ["GHCR_PAT"]):
+                raise ValueError("GHCR_PAT contains invalid characters")
             for var in env_vars:
                 sub_script = sub_script.replace(f"__{var}__", os.environ[var])
 
-        if dynamic_values and CloudProvider.ensure_startup_dynamic_substitutions(dynamic_vars, dynamic_values):
+        dynamic_values = dynamic_values or {}
+        if CloudProvider.ensure_startup_dynamic_substitutions(dynamic_vars, dynamic_values):
             for key, value in dynamic_values.items():
                 sub_script = sub_script.replace('{{' + key + '}}', value)
 

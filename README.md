@@ -1,37 +1,115 @@
 # SMG Cloud Provisioner
 
-A Kubernetes GPU node provisioner for hybrid K3s and Google Compute Engine environments, published by HOMINEM. It polls workload demand, creates GCE instances from an existing template, and removes idle capacity after a delay. Tailscale credentials and a supplied startup script connect new instances to the cluster.
-
-## Components
-
-| File | Responsibility |
-| --- | --- |
-| `provisioner.py` | Scaling loop, provisioning callbacks, and unready-node cleanup |
-| `k8s.py` | GPU pod discovery and Kubernetes node lifecycle |
-| `gce.py` | GCE instance creation and deletion |
-| `cloud_provider.py` | Provider interface and startup-script substitution |
-| `tailscale_provider.py` | Tailscale authentication support |
-| `main.py` | Process startup and scaler loop |
-
-GCE is the only implemented cloud provider. The provider interface is an extension point, not multi-cloud support.
+A Kubernetes node provisioner for hybrid K3s, GCE and EC2 environments. Independent GPU
+pools scale GCE or EC2 instances with GPU pod count. The optional emergency CPU pool
+launches when all non-provisioner workers are unavailable, and drains after
+workers have recovered continuously for the configured delay.
 
 ## Configuration and execution
 
-See [ENV.md](ENV.md) for environment variables. The process expects in-cluster Kubernetes credentials, Google Cloud credentials, an existing GCE instance template, and a startup script that joins the node to your cluster. Credentials and cluster-specific manifests belong outside Git.
+See [ENV.md](ENV.md). Pools have independent state and limits. Disabled
+providers need no credentials. Kubernetes initialization is explicit; importing
+modules no longer connects to the cluster or starts watchers.
 
 ```sh
-docker build -t smg-cloud-provisioner .
+python -m unittest discover -s tests -v
+docker build -t smg-cloud-provisioner:emergency-test .
 ```
 
-Deploy the image with your own Kubernetes service account, RBAC, secret references, and environment configuration. Importing the application starts infrastructure clients; this is not a local dry-run command. No HTTP API is currently implemented.
+Deploy a single replica with `Recreate` strategy: inventory reconciliation avoids
+restart duplicates, but there is no distributed leader election. Retain the
+existing control-plane placement, toleration and `dnsPolicy: Default`. RBAC needs
+node list/patch/delete, pod list, and `create` on the core `pods/eviction` subresource.
 
-## Current limitations
+Start with `DRY_RUN=true`. This reads live cloud/Kubernetes inventories and logs
+decisions without mutations. The
+standard script registers the taint `smgp-emergency=true:NoSchedule`; opt workloads
+in with this toleration:
 
-- Scaling compares GPU pod count with node count, assuming one GPU workload per node; it does not perform GPU-capacity bin packing.
-- `SCALER_MIN_NODES` and `SCALER_MAX_NODES` are declared but not enforced by the current scaling loop.
-- Unready-node cleanup uses node age, not elapsed time since the Ready condition changed.
-- The GCE template region is currently fixed to `us-west1`.
-- Recovery, scale-down behavior, and provisioning latency need validation for each deployment. This release does not claim production hardening or published performance measurements.
+```yaml
+tolerations:
+  - key: smgp-emergency
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+```
+
+## Creating the GCE CPU template
+
+Create a regional CPU template with a standard Ubuntu 24.04 image, sufficient
+RAM for your workloads, no GPU accelerators, outbound internet access, and a
+boot disk deleted with the VM. For example, e2-standard-8 provides 32 GiB RAM.
+Set `EMERGENCY_GCP_INSTANCE_TEMPLATE_NAME` and `EMERGENCY_PROVIDERS=gce`.
+Supply [scripts/emergency-startup.sh](scripts/emergency-startup.sh) through
+`EMERGENCY_STARTUP_SCRIPT`; credentials must come from Kubernetes Secrets.
+
+## EC2 capacity across Availability Zones
+
+EC2 launches use a one-instance **instant Fleet** in one region. Configure
+`AWS_SUBNET_IDS` with subnets from multiple AZs and set `EC2_CAPACITY_TYPE=spot`
+for price-capacity-optimized Spot allocation. On-demand remains the default.
+The provider resolves the template version, checks subnet VPC membership and
+instance-type offerings, then lets AWS allocate among eligible subnets.
+
+Remove fixed AZ/network-interface and market-option settings from the launch
+template; provide its security-group IDs instead. See [ENV.md](ENV.md) for the
+configuration and additional IAM permissions. Existing templates that pin these
+settings fail validation before any Fleet request is submitted.
+
+A separate EC2 GPU pool is available through `GPU_EC2_ENABLED=true`; it defaults
+to Spot and requires workloads to select its role, `smgp-role: gpu-aws`.
+The EC2 emergency pool must use a CPU template; do not point it at an H100 template
+as a substitute for a separate GPU pool. Fleet integration has local SDK tests;
+a live AWS launch requires the regional template, subnets, credentials and quotas.
+
+## Failover, recovery and tracking
+
+`EMERGENCY_PROVIDERS=ec2,gce` sets the default order; `gce,ec2` reverses it. A
+failed launch or join timeout advances the next attempt. Before retrying, the
+controller reconciles inventories for every configured provider and waits out any
+outstanding launch reservation. Inventory errors block new launches, because an
+unreachable provider may already have an instance. Existing instances on either
+provider prevent another launch. Recovery to an empty pool resets priority order.
+
+Recovery cordons and evicts workload pods, waits for them to disappear, deletes
+the Kubernetes node, then terminates the instance. DaemonSet and mirror pods are
+excluded. PodDisruptionBudgets can delay teardown indefinitely. Renewed worker
+loss cancels a partial drain and uncordons the emergency node.
+
+The instance audit log records names, provider, project/zone or region, timestamps,
+requests and completion events. EC2 termination submission is not confirmation
+that an instance has finished terminating. Preserve the log and verify inventory
+after a drill. Set `INSTANCE_AUDIT_LOG` to a persistent mounted path so it
+survives pod replacement. Keep credentials, infrastructure manifests, live
+inventories, and operational rollback records in your private infrastructure
+repository rather than this source repository.
+
+## AWS GPU bootstrap
+
+The packaged AWS script expects a compatible Ubuntu GPU base AMI with NVIDIA
+container runtime installed. It uses instance-store NVMe for K3s data and exposes
+`/mnt/smg-models` for explicitly mounted model caches. It accepts the DLAMI NVMe
+mount or one unpartitioned instance-store disk and refuses unexpected layouts.
+NVMe data is disposable; node-local PVCs do not become portable.
+GHCR credentials are written with mode 0600 before K3s starts.
+
+Release version tags through the repository's Docker Image Publish workflow.
+It authenticates to GHCR using its own GITHUB_TOKEN with packages:write; the
+cluster's GHCR pull credential does not need publishing permissions.
+
+## Limits
+
+- Available workers must be Ready, uncordoned, non-control-plane and not labelled
+  `smg-cloud-provisioner=true`. Provisioner GPU nodes do not mask an outage.
+- GPU scaling compares pod count to node count, without GPU bin packing.
+- Outage/recovery and first-seen provisioning timers are in memory; restarts delay
+  decisions. One active controller is required, including during rollouts.
+- Unready GPU cleanup retains the existing node-age timeout behavior.
+- Node-local persistent volumes do not move. An emergency node can acquire local
+  data through a newly bound claim; drain logs affected pod claims, but teardown
+  still destroys the local data. Distributed storage is separate work.
+- CPU capacity cannot run GPU workloads. Machine size and workload tolerations
+  determine which services can recover.
 
 ## AI Disclosure
 AI was used to assist in the creation of this code. The model did not design the architecture
@@ -42,3 +120,27 @@ and is responsible for less than 5% of the code. All code was reviewed and teste
 - Reviewing code for potential bugs and improvements. Improvements were implemented by human.
 - A rubber duck to go over my ideas with and get feed back on my approach and understanding.
 - Generated most things above this Disclosure, I like writing docs, but I mean genAI is badass.
+
+## Azure and provider architecture
+
+An initial Azure GPU adapter and shared provider lifecycle are available, disabled
+by default. See [Azure setup and recovery](docs/azure.md) and
+[provider architecture](docs/provider-architecture.md). `GPU_POOLS_JSON` enables
+explicit provider pools; omitting it preserves existing GCE/EC2 configuration.
+Azure requires live acceptance testing before production use.
+
+DigitalOcean GPU Droplets are also available through the provider registry, disabled
+by default. See [DigitalOcean setup and recovery](docs/digitalocean.md) for explicit
+Spot/On-Demand size selection, credentials, and the live acceptance checklist.
+
+## Local cloud integration tests
+
+Run `sh scripts/setup_emulators.sh`, then `.venv/bin/python scripts/test_emulators.py`.
+The suite uses Moto, DigitalOcean's OpenAPI schema with Prism, and a stateful ARM
+HTTP simulator. See [coverage, isolation and known gaps](docs/emulator-tests.md).
+
+Scaleway, Nebius and OVHcloud have experimental on-demand adapters. See
+[setup and qualification gaps](docs/remaining-providers.md), [disabled pool examples](docs/examples/remaining-gpu-pools.json),
+and [Runpod feasibility](docs/runpod-feasibility.md). These adapters have not been tested against live resources.
+
+See [multi-node logical pools, explicit placement order and purchasing configuration](docs/logical-pools.md).

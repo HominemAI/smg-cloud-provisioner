@@ -1,176 +1,149 @@
-# AI Disclosure: AI was used to flesh out call back logging and the unready node removal logic.
+"""Independent GPU and emergency pool reconciliation."""
+from dataclasses import dataclass, field
 import logging
 import os
+import threading
 import time
 
 import k8s
-from gce import GCEProvider
+from scheduling import KubernetesScheduler, Scheduler
+from scaling_policy import EmergencyPolicy, GpuPolicy, ScalingPolicy
+from cloud_provider import CloudProvider
 
 logger = logging.getLogger(__name__)
-logger.info("Starting Kubernetes Provisioner")
-
-# How often to check the gpu pressure
-SCALER_INTERVAL = os.environ.get("SCALER_TIME_DELAY", "120")
-MAX_NODES = os.environ.get("SCALER_MAX_NODES", "2")
-MIN_NODES = os.environ.get("SCALER_MIN_NODES", "0")
-SCALER_PROVISIONING_TIMEOUT = int(os.environ.get("SCALER_PROVISIONING_TIMEOUT", "300"))
-
-# How long to wait before dropping a node after excess pressure is detected
-SCALER_DROP_DELAY = int(os.environ.get("SCALER_DROP_DELAY", "900"))
-
-# How long to wait before removing an unready node (in seconds)
-UNREADY_NODE_TIMEOUT = int(os.environ.get("UNREADY_NODE_TIMEOUT", "600"))
-
-# Check for changes every 5 minutes
-IS_PROVISIONING = False
-IS_DEPROVISIONING = False
-
-PROVIDERS = {
-    "gce": GCEProvider(provider_name="gce")
-}
-
-PROVISIONING_TIME = time.time()
-EXCESS_CAPACITY_DETECTED_TIME = None
 
 
-def get_provider() -> GCEProvider:
-    return PROVIDERS["gce"]
+@dataclass
+class Pool:
+    name: str
+    provider: CloudProvider
+    role: str
+    max_nodes: int
+    min_nodes: int = 0
+    trigger_delay: float = 300
+    recovery_delay: float = 900
+    provisioning_timeout: float = 300
+    unready_timeout: float = 600
+    dry_run: bool = False
+    scheduler: Scheduler = field(default_factory=KubernetesScheduler)
+    policy: ScalingPolicy | None = None
+    clock: object = time.monotonic
+    outage_since: float | None = None
+    recovery_since: float | None = None
+    observed: dict = field(default_factory=dict)
+    missing_nodes: dict = field(default_factory=dict)
+    creating: bool = False
+    launching: str | None = None
+    launch_time: float | None = None
+    deleting: set = field(default_factory=set)
+    draining: set = field(default_factory=set)
+    lock: object = field(default_factory=threading.RLock)
+
+    def __post_init__(self):
+        if self.policy is None:
+            self.policy = EmergencyPolicy() if self.name == "emergency" else GpuPolicy()
+
+    def nodes(self):
+        return [node for node in self.scheduler.pool_nodes(self.role)
+                if (node.metadata.labels or {}).get(k8s.INSTANCE_PROVIDER_LABEL) in
+                [p.PROVIDER_NAME for p in getattr(self.provider, "providers", [self.provider])]
+                and (node.metadata.labels or {}).get(k8s.INSTANCE_IDENTIFIER_LABEL, '').startswith(
+                    self.provider.NAME_PREFIX + '-')]
+
+    def launch(self, now):
+        logger.info('%sLaunch instance for %s', 'DRY_RUN: ' if self.dry_run else '', self.name)
+        if self.dry_run:
+            return
+        self.creating = True
+        self.launch_time = now
+
+        def done(success, instance_name, error):
+            with self.lock:
+                self.creating = False
+                # Keep the launch reservation until timeout even on errors: a lost
+                # response is not proof that the cloud did not create the instance.
+                logger.log(logging.INFO if success else logging.ERROR,
+                           '%s creation %s: success=%s error=%s', self.name, instance_name, success, error)
+        try:
+            self.launching = self.provider.create_instance(callback=done)
+        except Exception:
+            self.creating = False
+            raise
+
+    def remove(self, name, node=None, drain=False):
+        if name in self.deleting:
+            return
+        logger.info('%sRemove %s instance %s', 'DRY_RUN: ' if self.dry_run else '', self.name, name)
+        if self.dry_run:
+            return
+        if node is not None:
+            if drain:
+                self.draining.add(name)
+                if not self.scheduler.drain(node):
+                    return
+            self.scheduler.deregister(name)
+        self.deleting.add(name)
+
+        def done(success, instance_name, error):
+            with self.lock:
+                self.deleting.discard(instance_name)
+                if success:
+                    self.observed.pop(instance_name, None)
+                    self.draining.discard(instance_name)
+                logger.log(logging.INFO if success else logging.ERROR,
+                           '%s deletion %s: success=%s error=%s', self.name, instance_name, success, error)
+        try:
+            self.provider.delete_instance(name, callback=done)
+        except Exception:
+            self.deleting.discard(name)
+            raise
+
+    def reconcile(self):
+        with self.lock:
+            now = self.clock()
+            instances = set(self.provider.list_instances())
+            nodes = {node.metadata.labels[k8s.INSTANCE_IDENTIFIER_LABEL]: node for node in self.nodes()}
+            for name in instances:
+                self.observed.setdefault(name, self.launch_time if name == self.launching else now)
+            self.observed = {name: started for name, started in self.observed.items() if name in instances}
+            if self.launching in instances or (
+                not self.creating and self.launch_time is not None
+                and now - self.launch_time >= self.provisioning_timeout
+            ):
+                self.launching = None
+                self.launch_time = None
+            self.policy.reconcile(self, now, instances, nodes)
+
+def build_pools():
+    from pool_configuration import build_pools as configure
+    return configure()
 
 
-def check_and_remove_unready_nodes():
-    logger.info("Checking for unready nodes...")
-
-    # Get all nodes with our instance identifier label (not just those in NODE_POOL)
-    all_nodes = k8s.v1.list_node(label_selector=f"{k8s.INSTANCE_IDENTIFIER_LABEL}")
-    current_time = time.time()
-
-    for node in all_nodes.items:
-        # Determine if node is ready
-        ready = False
-        ready_status = "Unknown"
-        if node.status and node.status.conditions:
-            for condition in node.status.conditions:
-                if condition.type == "Ready":
-                    ready = condition.status == "True"
-                    ready_status = condition.status
-                    break
-
-        if not ready:
-            creation_timestamp = node.metadata.creation_timestamp
-            age_seconds = current_time - creation_timestamp.timestamp()
-            instance_identifier = node.metadata.labels.get(k8s.INSTANCE_IDENTIFIER_LABEL)
-
-            logger.warning(
-                f"Unready node detected: {node.metadata.name} (age: {age_seconds:.0f}s, ready status: {ready_status})")
-
-            # Only remove if the node has been unready for longer than the timeout
-            if age_seconds > UNREADY_NODE_TIMEOUT:
-                if instance_identifier:
-                    logger.info(
-                        f"Removing unready node (exceeded timeout of {UNREADY_NODE_TIMEOUT}s): {node.metadata.name} - {instance_identifier}")
-                    k8s.deregister_k8s_node(instance_identifier)
-
-                    # Delete the instance from the cloud provider
-                    provider_name = node.metadata.labels.get(k8s.INSTANCE_PROVIDER_LABEL)
-                    if provider_name and provider_name in PROVIDERS:
-                        PROVIDERS[provider_name].delete_instance(
-                            instance_identifier=instance_identifier,
-                            callback=notify_deletion_callback
-                        )
-                else:
-                    logger.warning(f"Node {node.metadata.name} missing instance identifier, skipping cloud deletion")
-            else:
-                remaining = UNREADY_NODE_TIMEOUT - age_seconds
-                logger.info(
-                    f"Node {node.metadata.name} is unready but within timeout window ({remaining:.0f}s remaining)")
+def reconcile_pools(pools):
+    for pool in pools:
+        try:
+            pool.reconcile()
+        except Exception:
+            logger.exception('Error reconciling pool %s', pool.name)
 
 
-def notify_creation_callback(success: bool, instance_name: str, error: Exception):
-    global IS_PROVISIONING
-    if success:
-        logger.info(f"Instance {instance_name} created successfully")
-    else:
-        logger.error(f"Instance {instance_name} creation failed: {error}")
-        IS_PROVISIONING = False
-
-
-def notify_deletion_callback(success: bool, instance_name: str, error: Exception):
-    global IS_DEPROVISIONING
-    if success:
-        logger.info(f"Instance {instance_name} deleted successfully")
-    else:
-        logger.error(f"Instance {instance_name} deletion failed: {error}")
-    IS_DEPROVISIONING = False
-
-
-def auto_scale():
-    logger.info("Checking auto-scaling conditions...")
-    global IS_PROVISIONING, IS_DEPROVISIONING, PROVISIONING_TIME, SCALER_PROVISIONING_TIMEOUT, EXCESS_CAPACITY_DETECTED_TIME
-
-    if k8s.get_current_node_count() < len(k8s.GPU_PODS):
-        # Pressure detected - need more nodes
-        logger.info("Pressure detected: More GPU pods than nodes.")
-        EXCESS_CAPACITY_DETECTED_TIME = None  # Reset the excess capacity timer
-
-        if not IS_PROVISIONING:
-            logger.info("No provisioning in progress, starting new instance creation.")
-            IS_PROVISIONING = True
-            instance_name = get_provider().create_instance(callback=notify_creation_callback)
-            logger.info(f"Instance creation triggered: {instance_name} startup and registration in progress...")
-        else:
-            logger.info(f"Last node time: {k8s.get_latest_node_time()} vs {PROVISIONING_TIME}")
-            logger.info(f"{time.time() - PROVISIONING_TIME} vs {SCALER_PROVISIONING_TIMEOUT}")
-            if k8s.get_latest_node_time() > PROVISIONING_TIME:
-                IS_PROVISIONING = False
-                PROVISIONING_TIME = time.time()
-            elif time.time() - PROVISIONING_TIME > SCALER_PROVISIONING_TIMEOUT:
-                IS_PROVISIONING = False
-                raise RuntimeError("Provisioning timeout exceeded")
-
-    elif k8s.get_current_node_count() > len(k8s.GPU_PODS):
-        # Excess capacity detected - more nodes than pods
-        logger.info("Excess capacity detected: More nodes than GPU pods.")
-
-        # Track when we first detected excess capacity
-        if EXCESS_CAPACITY_DETECTED_TIME is None:
-            EXCESS_CAPACITY_DETECTED_TIME = time.time()
-            logger.info(f"Starting {SCALER_DROP_DELAY}s delay before node removal")
-            return  # Exit and wait for next check
-
-        # Check if enough time has passed since excess capacity was detected
-        time_in_excess = time.time() - EXCESS_CAPACITY_DETECTED_TIME
-        if time_in_excess >= SCALER_DROP_DELAY:
-            logger.info(f"Excess capacity delay expired ({time_in_excess:.0f}s >= {SCALER_DROP_DELAY}s), removing node")
-            IS_DEPROVISIONING = True
-            response = k8s.request_node_removal(1)
-            if response:
-                PROVIDERS[response["provider"]].delete_instance(
-                    instance_identifier=response["identifier"],
-                    callback=notify_deletion_callback
-                )
-                # Reset the timer after successful removal request
-                EXCESS_CAPACITY_DETECTED_TIME = None
-            IS_DEPROVISIONING = False
-        else:
-            remaining = SCALER_DROP_DELAY - time_in_excess
-            logger.info(f"Excess capacity detected, waiting {remaining:.0f}s before node removal")
-
-    else:
-        # Balanced - nodes == pods
-        IS_PROVISIONING = False
-        IS_DEPROVISIONING = False
-        EXCESS_CAPACITY_DETECTED_TIME = None  # Reset the excess capacity timer
-
-
-def start_auto_scaler():
-    global SCALER_INTERVAL
-    logger.info(f"Starting auto-scaler with interval {SCALER_INTERVAL} seconds")
-    while True:
+def start_auto_scaler(pools=None, shutdown=None):
+    pools = build_pools() if pools is None else pools
+    shutdown = shutdown or threading.Event()
+    interval = int(os.getenv('SCALER_TIME_DELAY', '120'))
+    if interval <= 0:
+        raise ValueError('SCALER_TIME_DELAY must be positive')
+    while not shutdown.is_set():
         try:
             k8s.update_nodes_list()
-            check_and_remove_unready_nodes()
-            k8s.update_pods_lists()
-            auto_scale()
-        except Exception as e:
-            logger.exception(f"Error in auto-scaler:")
-        time.sleep(int(SCALER_INTERVAL))
+        except Exception:
+            logger.exception('Cannot refresh nodes; skipping reconciliation')
+        else:
+            for pool in pools:
+                try:
+                    if pool.name != 'emergency':
+                        k8s.update_pods_lists()
+                    pool.reconcile()
+                except Exception:
+                    logger.exception('Error reconciling pool %s', pool.name)
+        shutdown.wait(interval)

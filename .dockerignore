@@ -20,3 +20,15 @@ kubeconfig*
 local-notes
 artifacts
 runs
+
+deployment
+PLAN.md
+.aws
+.codex
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.cache
+node_modules
+tests/integration/node_modules

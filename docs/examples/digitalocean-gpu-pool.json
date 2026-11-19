@@ -1,0 +1,27 @@
+[
+  {
+    "name": "gpu-do",
+    "provider": "digitalocean",
+    "enabled": false,
+    "role": "gpu-do",
+    "max_nodes": 1,
+    "provisioning_timeout": 1200,
+    "unready_timeout": 1200,
+    "options": {
+      "name_prefix": "smg-gpu-do",
+      "ledger_path": "/var/lib/smg-cloud-provisioner/lifecycle.sqlite",
+      "settings": {
+        "account_uuid": "REPLACE_WITH_ACCOUNT_OR_TEAM_UUID",
+        "region": "mkc1",
+        "size": "gpu-b300x1-288gb-lc-spot",
+        "image_id": 123,
+        "vpc_uuid": "REPLACE_WITH_VPC_UUID",
+        "firewall_id": "REPLACE_WITH_FIREWALL_UUID",
+        "project_id": "REPLACE_WITH_PROJECT_UUID",
+        "ssh_keys": [456],
+        "capacity_type": "spot",
+        "public_networking": false
+      }
+    }
+  }
+]
