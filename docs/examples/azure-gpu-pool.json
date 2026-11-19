@@ -1,0 +1,29 @@
+[
+  {
+    "name": "gpu-azure",
+    "provider": "azure",
+    "enabled": false,
+    "role": "gpu-azure",
+    "max_nodes": 1,
+    "provisioning_timeout": 1200,
+    "unready_timeout": 1200,
+    "options": {
+      "name_prefix": "smg-gpu-azure",
+      "ledger_path": "/var/lib/smg-cloud-provisioner/lifecycle.sqlite",
+      "settings": {
+        "subscription_id": "SUBSCRIPTION_ID",
+        "resource_group": "DEDICATED_GPU_RESOURCE_GROUP",
+        "location": "VERIFIED_REGION",
+        "subnet_id": "/subscriptions/SUBSCRIPTION_ID/resourceGroups/NETWORK_GROUP/providers/Microsoft.Network/virtualNetworks/VNET/subnets/SUBNET",
+        "nsg_id": "/subscriptions/SUBSCRIPTION_ID/resourceGroups/NETWORK_GROUP/providers/Microsoft.Network/networkSecurityGroups/NSG",
+        "vm_size": "VERIFIED_SINGLE_GPU_SKU",
+        "image_id": "/subscriptions/SUBSCRIPTION_ID/resourceGroups/IMAGE_GROUP/providers/Microsoft.Compute/galleries/GALLERY/images/GPU_IMAGE/versions/1.0.0",
+        "ssh_public_key": "ssh-ed25519 REPLACE_WITH_PUBLIC_KEY",
+        "capacity_type": "spot",
+        "zone": "",
+        "public_ip": false,
+        "os_disk_gb": 128
+      }
+    }
+  }
+]

@@ -33,7 +33,7 @@ class EC2GpuTests(unittest.TestCase):
         with patch.dict(os.environ,env,clear=True), patch('ec2.boto3.client'):
             pool, = build_pools()
         self.assertEqual(pool.role,'gpu-aws')
-        self.assertEqual(pool.provider.capacity_type,'spot')
+        self.assertEqual(pool.provider.capacity_type,'on-demand')
         self.assertEqual(pool.max_nodes,1)
         self.assertEqual(pool.provisioning_timeout,1200)
         self.assertIn('--node-taint nvidia.com/gpu=gpu-aws:NoSchedule',pool.provider.startup_script)

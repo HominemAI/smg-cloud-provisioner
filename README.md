@@ -120,3 +120,27 @@ and is responsible for less than 5% of the code. All code was reviewed and teste
 - Reviewing code for potential bugs and improvements. Improvements were implemented by human.
 - A rubber duck to go over my ideas with and get feed back on my approach and understanding.
 - Generated most things above this Disclosure, I like writing docs, but I mean genAI is badass.
+
+## Azure and provider architecture
+
+An initial Azure GPU adapter and shared provider lifecycle are available, disabled
+by default. See [Azure setup and recovery](docs/azure.md) and
+[provider architecture](docs/provider-architecture.md). `GPU_POOLS_JSON` enables
+explicit provider pools; omitting it preserves existing GCE/EC2 configuration.
+Azure requires live acceptance testing before production use.
+
+DigitalOcean GPU Droplets are also available through the provider registry, disabled
+by default. See [DigitalOcean setup and recovery](docs/digitalocean.md) for explicit
+Spot/On-Demand size selection, credentials, and the live acceptance checklist.
+
+## Local cloud integration tests
+
+Run `sh scripts/setup_emulators.sh`, then `.venv/bin/python scripts/test_emulators.py`.
+The suite uses Moto, DigitalOcean's OpenAPI schema with Prism, and a stateful ARM
+HTTP simulator. See [coverage, isolation and known gaps](docs/emulator-tests.md).
+
+Scaleway, Nebius and OVHcloud have experimental on-demand adapters. See
+[setup and qualification gaps](docs/remaining-providers.md), [disabled pool examples](docs/examples/remaining-gpu-pools.json),
+and [Runpod feasibility](docs/runpod-feasibility.md). These adapters have not been tested against live resources.
+
+See [multi-node logical pools, explicit placement order and purchasing configuration](docs/logical-pools.md).

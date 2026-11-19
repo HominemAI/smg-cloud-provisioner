@@ -78,3 +78,11 @@ secrets.yaml
 
 /deployment/
 /PLAN.md
+
+# Durable runtime lifecycle metadata belongs on persistent storage, not in Git.
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.cache/
+node_modules/

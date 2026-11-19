@@ -1,0 +1,32 @@
+name: Provider tests
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  local-provider-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/integration/package-lock.json
+      - name: Install pinned test tools and official API schema
+        env:
+          PYTHON: python
+        run: sh scripts/setup_emulators.sh
+      - name: Unit and SDK contract tests
+        run: python -m unittest discover -s tests -q
+      - name: HTTP emulator integration tests (loopback only)
+        run: python scripts/test_emulators.py

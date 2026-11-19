@@ -35,7 +35,9 @@ class EC2Provider(CloudProvider):
         self.subnet_ids = list(dict.fromkeys(s.strip() for s in raw_subnets if s.strip()))
         if not self.subnet_ids:
             raise ValueError('AWS_SUBNET_IDS must list at least one subnet in AWS_REGION')
-        self.capacity_type = capacity_type or os.getenv('EC2_CAPACITY_TYPE', 'on-demand')
+        self.explicit_capacity_type = capacity_type or os.getenv('EC2_CAPACITY_TYPE')
+        self.capacity_type = self.explicit_capacity_type or 'on-demand'
+        self.template_market = None
         if self.capacity_type not in ('spot', 'on-demand'):
             raise ValueError('EC2_CAPACITY_TYPE must be spot or on-demand')
         self.region = region
@@ -52,6 +54,8 @@ class EC2Provider(CloudProvider):
         except Exception as error:
             if isinstance(error, ClientError):
                 code = error.response['Error']['Code']
+                if code in ('InsufficientInstanceCapacity', 'InsufficientHostCapacity', 'InstanceLimitExceeded', 'VcpuLimitExceeded', 'UnauthorizedOperation', 'AuthFailure', 'AccessDenied'):
+                    error.launch_rejected = True
                 category = ('capacity' if code in ('InsufficientInstanceCapacity', 'InsufficientHostCapacity')
                             else 'quota' if code in ('InstanceLimitExceeded', 'VcpuLimitExceeded')
                             else 'authorization' if code in ('UnauthorizedOperation', 'AuthFailure', 'AccessDenied')
@@ -82,8 +86,16 @@ class EC2Provider(CloudProvider):
             raise ValueError('Remove fixed AZ, placement group or host from the Fleet launch template')
         if data.get('NetworkInterfaces'):
             raise ValueError('Use template SecurityGroupIds and subnet public-IP settings; remove NetworkInterfaces for Fleet')
-        if data.get('InstanceMarketOptions'):
-            raise ValueError('Remove InstanceMarketOptions from the template; use EC2_CAPACITY_TYPE')
+        self.capacity_type = self.explicit_capacity_type or 'on-demand'
+        self.template_market = data.get('InstanceMarketOptions')
+        if self.template_market:
+            mode = self.template_market.get('MarketType')
+            if mode not in ('spot', 'on-demand') or (self.explicit_capacity_type and self.explicit_capacity_type != mode):
+                raise ValueError('Explicit capacity mode conflicts with template market settings')
+            spot = self.template_market.get('SpotOptions', {})
+            if spot.get('SpotInstanceType', 'one-time') != 'one-time' or spot.get('InstanceInterruptionBehavior', 'terminate') != 'terminate':
+                raise ValueError('Persistent or stop/hibernate Spot requests require a separate request lifecycle')
+            self.capacity_type = mode
         if data.get('CapacityReservationSpecification', {}).get('CapacityReservationTarget'):
             raise ValueError('Remove the fixed capacity reservation from the Fleet launch template')
 
@@ -124,8 +136,25 @@ class EC2Provider(CloudProvider):
 
         def launch():
             specification, overrides = self._launch_configuration()
-            specification['LaunchTemplateSpecificationUserData'] = base64.b64encode(script).decode('ascii')
             tags = [{'Key': 'Name', 'Value': name}, {'Key': IDENTIFIER_TAG, 'Value': name}]
+            if self.template_market:
+                # Fleet does not accept template InstanceMarketOptions. Native
+                # RunInstances honors the entire template purchasing specification.
+                # One explicit subnet per attempt; ordered candidates provide fallback.
+                subnet = next(x['SubnetId'] for identifier in self.subnet_ids
+                              for x in overrides if x['SubnetId'] == identifier)
+                record('create_requested', self.PROVIDER_NAME, name, region=self.region,
+                       client_token=name, subnet_ids=[subnet], capacity_type='template')
+                result = self.client.run_instances(LaunchTemplate=specification,
+                    MinCount=1, MaxCount=1, ClientToken=name, SubnetId=subnet,
+                    UserData=script.decode('utf-8'),
+                    TagSpecifications=[{'ResourceType': 'instance', 'Tags': tags}])
+                ids = [item['InstanceId'] for item in result.get('Instances', [])]
+                record('created', self.PROVIDER_NAME, name, region=self.region, instance_ids=ids)
+                if len(ids) != 1:
+                    raise FleetLaunchError('Template launch did not return exactly one instance')
+                return
+            specification['LaunchTemplateSpecificationUserData'] = base64.b64encode(script).decode('ascii')
             request = dict(
                 Type='instant', ClientToken=name,
                 LaunchTemplateConfigs=[{'LaunchTemplateSpecification': specification, 'Overrides': overrides}],
@@ -143,9 +172,10 @@ class EC2Provider(CloudProvider):
                     'AllocationStrategy': 'price-capacity-optimized',
                     'InstanceInterruptionBehavior': 'terminate',
                     'MinTargetCapacity': 1,
+                    'SingleInstanceType': True,
                 }
             else:
-                request['OnDemandOptions'] = {'AllocationStrategy': 'lowest-price', 'MinTargetCapacity': 1}
+                request['OnDemandOptions'] = {'AllocationStrategy': 'lowest-price', 'MinTargetCapacity': 1, 'SingleInstanceType': True}
             record('create_requested', self.PROVIDER_NAME, name, region=self.region,
                    client_token=name, capacity_type=self.capacity_type,
                    subnet_ids=[o['SubnetId'] for o in overrides])
@@ -161,7 +191,9 @@ class EC2Provider(CloudProvider):
                     record('delete_requested', self.PROVIDER_NAME, name, region=self.region, instance_ids=ids)
                     self.client.terminate_instances(InstanceIds=ids)
                     record('termination_submitted', self.PROVIDER_NAME, name, region=self.region, instance_ids=ids)
-                raise FleetLaunchError('Expected one Fleet instance; returned %s; errors=%s' % (len(ids), errors))
+                error = FleetLaunchError('Expected one Fleet instance; returned %s; errors=%s' % (len(ids), errors))
+                error.launch_rejected = not ids and bool(errors)
+                raise error
             # Errors in other AZs do not invalidate a successful one-instance launch.
             record('created', self.PROVIDER_NAME, name, region=self.region,
                    fleet_id=result.get('FleetId'), instance_ids=ids)

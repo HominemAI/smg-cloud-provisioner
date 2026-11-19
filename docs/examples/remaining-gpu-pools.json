@@ -1,0 +1,68 @@
+[
+  {
+    "enabled": false,
+    "name": "gpu-scaleway",
+    "provider": "scaleway",
+    "role": "gpu-scaleway",
+    "max_nodes": 1,
+    "options": {
+      "name_prefix": "smg-gpu-scaleway",
+      "ledger_path": "/var/lib/smg-cloud-provisioner/lifecycle.sqlite",
+      "settings": {
+        "project_id": "<project-uuid>",
+        "zone": "fr-par-1",
+        "commercial_type": "<local-ssd-single-gpu-type>",
+        "image_id": "<image-uuid>",
+        "security_group_id": "<group-uuid>",
+        "capacity_type": "on-demand"
+      }
+    }
+  },
+  {
+    "enabled": false,
+    "name": "gpu-nebius",
+    "provider": "nebius",
+    "role": "gpu-nebius",
+    "max_nodes": 1,
+    "options": {
+      "name_prefix": "smg-gpu-nebius",
+      "ledger_path": "/var/lib/smg-cloud-provisioner/lifecycle.sqlite",
+      "settings": {
+        "project_id": "<project-id>",
+        "subnet_id": "<subnet-id>",
+        "image_id": "<image-id>",
+        "platform": "<platform-name>",
+        "preset": "<single-gpu-preset>",
+        "security_group_ids": [
+          "<group-id>"
+        ],
+        "capacity_type": "on-demand"
+      }
+    }
+  },
+  {
+    "enabled": false,
+    "name": "gpu-ovhcloud",
+    "provider": "ovhcloud",
+    "role": "gpu-ovhcloud",
+    "max_nodes": 1,
+    "options": {
+      "name_prefix": "smg-gpu-ovhcloud",
+      "ledger_path": "/var/lib/smg-cloud-provisioner/lifecycle.sqlite",
+      "settings": {
+        "project_id": "<openstack-project-id>",
+        "region": "<region>",
+        "auth_url": "https://<identity-host>/v3",
+        "flavor_id": "<flavor-id>",
+        "image_id": "<image-id>",
+        "network_id": "<network-id>",
+        "subnet_id": "<subnet-id>",
+        "security_group_ids": [
+          "<group-id>"
+        ],
+        "key_name": "<keypair-name>",
+        "capacity_type": "on-demand"
+      }
+    }
+  }
+]

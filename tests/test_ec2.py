@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 import boto3
-from botocore.stub import Stubber
+from botocore.stub import Stubber, ANY
 from ec2 import EC2Provider
 
 
@@ -37,7 +37,7 @@ class EC2Tests(unittest.TestCase):
         self.stub.add_response('describe_launch_template_versions', {
             'LaunchTemplateVersions': [{'LaunchTemplateId': 'lt-test', 'VersionNumber': 3, 'LaunchTemplateData': data}],
         }, {'LaunchTemplateId': 'lt-test', 'Versions': ['$Default']})
-        if any(data.get(k) for k in ('Placement', 'NetworkInterfaces', 'InstanceMarketOptions', 'CapacityReservationSpecification')) or not data.get('InstanceType'):
+        if any(data.get(k) for k in ('Placement', 'NetworkInterfaces', 'CapacityReservationSpecification')) or not data.get('InstanceType'):
             return
         subnet_data = subnets if subnets is not None else [
             {'SubnetId': 'subnet-a', 'VpcId': 'vpc-test', 'AvailabilityZoneId': 'usw2-az1', 'State': 'available'},
@@ -77,9 +77,9 @@ class EC2Tests(unittest.TestCase):
         }
         if capacity_type == 'spot':
             request['SpotOptions'] = {'AllocationStrategy': 'price-capacity-optimized',
-                                     'InstanceInterruptionBehavior': 'terminate', 'MinTargetCapacity': 1}
+                                     'InstanceInterruptionBehavior': 'terminate', 'MinTargetCapacity': 1, 'SingleInstanceType': True}
         else:
-            request['OnDemandOptions'] = {'AllocationStrategy': 'lowest-price', 'MinTargetCapacity': 1}
+            request['OnDemandOptions'] = {'AllocationStrategy': 'lowest-price', 'MinTargetCapacity': 1, 'SingleInstanceType': True}
         return request
 
     def test_create_on_demand_across_subnets(self):
@@ -90,7 +90,7 @@ class EC2Tests(unittest.TestCase):
         self.assertTrue(self.result['success'])
 
     def test_spot_filters_unsupported_az_and_accepts_success_with_other_errors(self):
-        self.provider.capacity_type = 'spot'
+        self.provider.explicit_capacity_type = 'spot'
         self.preflight(offered=('usw2-az2',))
         self.stub.add_response('create_fleet', {'FleetId': 'fleet-1', 'Instances': [{'InstanceIds': ['i-123']}],
             'Errors': [{'ErrorCode': 'InsufficientInstanceCapacity'}]}, self.expected_request('spot', ('subnet-b',)))
@@ -131,10 +131,14 @@ class EC2Tests(unittest.TestCase):
         self.launch()
         self.assertFalse(self.result['success'])
 
-    def test_template_market_options_rejected(self):
+    def test_template_market_options_honored(self):
         self.preflight(template_data={'InstanceType': 'p5.4xlarge', 'InstanceMarketOptions': {'MarketType': 'spot'}})
+        self.stub.add_response('run_instances', {'Instances': [{'InstanceId': 'i-template'}]}, {
+            'LaunchTemplate': {'LaunchTemplateId': 'lt-test', 'Version': '3'},
+            'MinCount': 1, 'MaxCount': 1, 'ClientToken': ANY, 'SubnetId': 'subnet-a',
+            'UserData': ANY, 'TagSpecifications': ANY})
         self.launch()
-        self.assertFalse(self.result['success'])
+        self.assertTrue(self.result['success'])
 
     def test_subnets_must_share_vpc(self):
         self.preflight(subnets=[
